@@ -1001,7 +1001,7 @@ function resize(){ dpr = DPR_FORCE_ONE ? 1 : Math.max(1, window.devicePixelRatio
 window.addEventListener('resize', resize);
 let keys = {}; let mouse = { x:0, y:0, down:false }; let bindingAction = null;
 
-const GAME_VERSION = '1.0.9';
+const GAME_VERSION = '1.0.10';
 let running = false, showHelp = false;
 let isPaused = false;
 let isSettingsFromHome = false;
@@ -1718,7 +1718,7 @@ window.connectToPhoton = function(roomId, isHost) {
         enemy = {
           id: 'player_' + actorNr, faction: 'player', team: eTeam, isRemotePlayer: true,
           x: content.x, y: content.y, targetX: content.x, targetY: content.y,
-          vx:0, vy:0, angle: content.a, targetAngle: content.a,
+          vx: content.vx || 0, vy: content.vy || 0, angle: content.a, targetAngle: content.a,
           turnSpeed: 0.1, thrust: 0.1, maxSpeed: 6, drag: 0.005,
           alive: true, hp: content.hp || 250, maxHp: 250, rollPhase: 0,
           weaponTimer: 0, weaponType: 0, ai: null, isGhost: content.hp <= 0, lives: content.l || 0 
@@ -1726,6 +1726,8 @@ window.connectToPhoton = function(roomId, isHost) {
         ships.push(enemy);
       } else {
         enemy.targetX = content.x; enemy.targetY = content.y; enemy.targetAngle = content.a;
+        if (content.vx !== undefined) enemy.vx = content.vx;
+        if (content.vy !== undefined) enemy.vy = content.vy;
         enemy.team = content.t !== undefined ? content.t : enemy.team;
         if (content.l !== undefined) enemy.lives = content.l;
         if(content.hp !== undefined) {
@@ -1749,7 +1751,11 @@ window.connectToPhoton = function(roomId, isHost) {
       const shooterId = content.id ? content.id : ('player_' + actorNr);
       let shooter = ships.find(s => s.id === shooterId);
       if (shooter && !shooter.isGhost) {
-        shooter.x = content.x; shooter.y = content.y; shooter.angle = content.a;
+        if (shooter.isRemotePlayer || shooter.isRemoteAI) {
+           shooter.targetX = content.x; shooter.targetY = content.y; shooter.targetAngle = content.a;
+        } else {
+           shooter.x = content.x; shooter.y = content.y; shooter.angle = content.a;
+        }
         shooter.weaponType = content.type;
         fireBullet(shooter, 47, 7.5, 0.5, true); 
       }
@@ -1775,11 +1781,15 @@ window.connectToPhoton = function(roomId, isHost) {
               aiShip = makeAIShip('ai');
               aiShip.id = data.id; aiShip.isRemoteAI = true; aiShip.team = data.team;
               aiShip.x = data.x; aiShip.y = data.y; aiShip.angle = data.a;
+              aiShip.targetX = data.x; aiShip.targetY = data.y; aiShip.targetAngle = data.a;
+              aiShip.vx = data.vx || 0; aiShip.vy = data.vy || 0;
               aiShip.maxHp = data.mHp || 45; aiShip.hp = data.hp || aiShip.maxHp;
               aiShip.lives = data.l !== undefined ? data.l : 0;
               ships.push(aiShip);
           } else {
               aiShip.targetX = data.x; aiShip.targetY = data.y; aiShip.targetAngle = data.a;
+              if (data.vx !== undefined) aiShip.vx = data.vx;
+              if (data.vy !== undefined) aiShip.vy = data.vy;
               aiShip.team = data.team;
               if (data.l !== undefined) aiShip.lives = data.l;
               
@@ -1967,16 +1977,16 @@ if (!window.isMultiplayer) {
     if (window.isMultiplayer && running && !isPaused && photonClient && photonClient.isJoinedToRoom()) {
       const p = ships.find(s => s.id === playerId);
       if (p) {
-        photonClient.raiseEvent(1, { x: p.x, y: p.y, a: p.angle, hp: p.hp, t: p.team, l: lives }, { receivers: Photon.LoadBalancing.Constants.ReceiverGroup.Others });
+        photonClient.raiseEvent(1, { x: p.x, y: p.y, vx: p.vx, vy: p.vy, a: p.angle, hp: p.hp, t: p.team, l: lives }, { receivers: Photon.LoadBalancing.Constants.ReceiverGroup.Others });
       }
       if (isRoomHost()) {
           const aiData = ships.filter(s => s.ai && !s.isRemoteAI && (s.alive || s.lives > 0)).map(s => ({
-              id: s.id, x: s.x, y: s.y, a: s.angle, hp: s.hp, f: s.faction, team: s.team, mHp: s.maxHp, l: s.lives
+              id: s.id, x: s.x, y: s.y, vx: s.vx, vy: s.vy, a: s.angle, hp: s.hp, f: s.faction, team: s.team, mHp: s.maxHp, l: s.lives
           }));
           if (aiData.length > 0) photonClient.raiseEvent(6, aiData, { receivers: Photon.LoadBalancing.Constants.ReceiverGroup.Others });
       }
     }
-  }, 40); // Increased sync rate to 25Hz
+  }, 20); // Increased sync rate to 50Hz
 }
 running = true;
 updateTouchUIVisibility();
