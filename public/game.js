@@ -1,1913 +1,3 @@
-<!doctype html>
-<html lang="ja">
-
-<head>
-    <meta name="robots" content="noindex, nofollow" />
-    <meta charset="utf-8" />
-    <meta name="viewport"
-        content="width=device-width,initial-scale=1,maximum-scale=1,minimum-scale=1,user-scalable=no,viewport-fit=cover" />
-    <link rel="icon" type="image/png" href="icon/icon.png" />
-    <link rel="apple-touch-icon" href="icon/icon.png" />
-    <link rel="manifest" href="manifest.json" />
-    <title>Zero-G Space Shooter Online</title>
-    <!-- Photon Javascript SDK -->
-    <script src="./photon.min.js"></script>
-    <style>
-        body {
-            user-select: none;
-            -webkit-user-select: none;
-            -moz-user-select: none;
-            -ms-user-select: none;
-            -webkit-touch-callout: none;
-        }
-
-        html,
-        body {
-            height: 100%;
-            margin: 0;
-            cursor: crosshair;
-            overflow: hidden;
-        }
-
-        html,
-        body {
-            background: #050510;
-            color: #fff;
-            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-        }
-
-        #game-wrap {
-            position: fixed;
-            inset: 0;
-            overflow: hidden;
-        }
-
-        canvas {
-            display: block;
-            width: 100%;
-            height: 100%;
-            background: transparent;
-        }
-
-        .hud {
-            display: none;
-            position: fixed;
-            left: calc(20px + env(safe-area-inset-left, 0px) + var(--safe-area-extra, 0px));
-            bottom: calc(20px + env(safe-area-inset-bottom, 0px) + var(--safe-area-extra, 0px));
-            pointer-events: none;
-            opacity: 0.85;
-            font-size: 13px;
-            background: rgba(0, 15, 30, 0.6);
-            padding: 10px 16px;
-            border-radius: 4px;
-            border-left: 3px solid #00f0ff;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
-            text-shadow: 0 0 4px rgba(0, 240, 255, 0.5);
-        }
-
-        kbd {
-            border: 1px solid rgba(0, 240, 255, 0.4);
-            border-radius: 4px;
-            padding: 2px 6px;
-            margin-right: 4px;
-            background: rgba(0, 240, 255, 0.1);
-            color: #00f0ff;
-            font-weight: bold;
-            box-shadow: inset 0 0 4px rgba(0, 240, 255, 0.2);
-        }
-
-        .top-right {
-            position: fixed;
-            right: calc(20px + env(safe-area-inset-right, 0px) + var(--safe-area-extra, 0px));
-            top: calc(20px + env(safe-area-inset-top, 0px) + var(--safe-area-extra, 0px));
-            text-align: right;
-            font-size: 13px;
-            opacity: 0.9;
-            text-shadow: 0 0 5px rgba(0, 240, 255, 0.5);
-        }
-
-        .audio-hint {
-            position: fixed;
-            left: 50%;
-            top: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.8);
-            padding: 16px 24px;
-            border-radius: 8px;
-            display: none;
-            z-index: 999;
-            text-align: center;
-            font-size: 16px;
-            border: 1px solid #00f0ff;
-            box-shadow: 0 0 15px rgba(0, 240, 255, 0.3);
-        }
-
-        .audio-hint small {
-            display: block;
-            margin-top: 8px;
-            font-size: 13px;
-            color: #aaa;
-        }
-
-        /* ===== SF風 サイバーデザイン ===== */
-        .game-modal {
-            position: fixed;
-            left: 50%;
-            top: 50%;
-            transform: translate(-50%, -50%);
-            background: linear-gradient(135deg,
-                    rgba(10, 15, 30, 0.95),
-                    rgba(0, 5, 15, 0.98));
-            border: 1px solid rgba(0, 240, 255, 0.3);
-            border-top: 4px solid #00f0ff;
-            box-shadow:
-                0 10px 30px rgba(0, 0, 0, 0.8),
-                0 0 20px rgba(0, 240, 255, 0.15);
-            padding: 24px 28px;
-            border-radius: 4px;
-            z-index: 2000;
-            width: 420px;
-            max-height: 88vh;
-            overflow-y: auto;
-            color: #dfefff;
-            font-size: 14px;
-            text-align: center;
-            -webkit-overflow-scrolling: touch;
-            touch-action: manipulation;
-            animation: modalIn 0.22s ease-out forwards;
-        }
-
-        .game-modal h3 {
-            margin: 0 0 20px 0;
-            font-size: 22px;
-            color: #00f0ff;
-            text-shadow: 0 0 8px rgba(0, 240, 255, 0.8);
-            letter-spacing: 3px;
-            font-weight: 800;
-        }
-
-        .game-modal h4 {
-            margin: 0 0 14px 0;
-            font-size: 16px;
-            color: #00f0ff;
-            border-bottom: 1px dashed rgba(0, 240, 255, 0.4);
-            padding-bottom: 6px;
-        }
-
-        .game-modal p {
-            margin: 0 0 16px 0;
-            color: #cfe;
-            font-size: 14px;
-        }
-
-        .game-modal input[type="text"],
-        .game-modal input[type="number"] {
-            padding: 8px 12px;
-            border-radius: 2px;
-            border: 1px solid rgba(0, 240, 255, 0.3);
-            background: rgba(0, 15, 30, 0.8);
-            color: #00f0ff;
-            font-size: 16px;
-            margin-bottom: 8px;
-            font-family: inherit;
-            transition: 0.2s;
-            box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.5);
-        }
-
-        .game-modal input[type="text"] {
-            width: 80%;
-        }
-
-        .game-modal input[type="text"]:focus,
-        .game-modal input[type="number"]:focus {
-            outline: none;
-            border-color: #00f0ff;
-            box-shadow:
-                0 0 10px rgba(0, 240, 255, 0.3),
-                inset 0 0 5px rgba(0, 240, 255, 0.2);
-        }
-
-        /* 洗練されたサイバー風ボタン */
-        .cyber-btn {
-            --c: #00f0ff;
-            --glow: rgba(0, 240, 255, 0.3);
-            padding: 10px 20px;
-            border-radius: 2px;
-            cursor: pointer;
-            background: linear-gradient(90deg,
-                    rgba(0, 0, 0, 0.6),
-                    rgba(0, 0, 0, 0.2));
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-left: 4px solid var(--c);
-            color: var(--c);
-            font-family: inherit;
-            font-weight: bold;
-            letter-spacing: 1.5px;
-            transition: all 0.2s ease;
-            margin: 4px;
-            text-transform: uppercase;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
-            touch-action: manipulation;
-            -webkit-tap-highlight-color: transparent;
-        }
-
-        .cyber-btn:hover {
-            background: rgba(255, 255, 255, 0.05);
-            border-color: var(--c);
-            box-shadow:
-                0 0 15px var(--glow),
-                inset 0 0 10px var(--glow);
-            text-shadow: 0 0 5px var(--c);
-        }
-
-        .cyber-btn:active {
-            transform: scale(0.97);
-        }
-
-        .cyber-btn:disabled {
-            opacity: 0.4;
-            cursor: not-allowed;
-            border-color: #444;
-            filter: grayscale(1);
-        }
-
-        .btn-red {
-            --c: #ff0055;
-            --glow: rgba(255, 0, 85, 0.3);
-        }
-
-        .btn-pink {
-            --c: #f0f;
-            --glow: rgba(255, 0, 255, 0.3);
-        }
-
-        .btn-green {
-            --c: #00ff66;
-            --glow: rgba(0, 255, 102, 0.3);
-        }
-
-        .btn-orange {
-            --c: #ff8800;
-            --glow: rgba(255, 136, 0, 0.3);
-        }
-
-        .setting-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px 4px;
-            border-bottom: 1px dashed rgba(0, 240, 255, 0.1);
-            border-radius: 3px;
-            transition: background 0.15s ease;
-        }
-
-        .setting-row:last-child {
-            border-bottom: none;
-        }
-
-        .setting-row:hover {
-            background: rgba(0, 240, 255, 0.03);
-        }
-
-        /* ===== キー設定リストのスクロール対応 ===== */
-        #km-list {
-            max-height: 40vh;
-            overflow-y: auto;
-            padding-right: 5px;
-            text-align: left;
-        }
-
-        #km-list::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        #km-list::-webkit-scrollbar-thumb {
-            background: #00f0ff;
-            border-radius: 3px;
-        }
-
-        .km-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px 0;
-            border-bottom: 1px dashed rgba(0, 240, 255, 0.2);
-        }
-
-        .km-key {
-            min-width: 120px;
-            text-align: right;
-            margin-right: 12px;
-            color: #00f0ff;
-        }
-
-        /* 画面設定スクロール対応 */
-        .settings-container {
-            max-height: 45vh;
-            overflow-y: auto;
-            padding-right: 8px;
-            text-align: left;
-        }
-
-        .settings-container::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        .settings-container::-webkit-scrollbar-thumb {
-            background: #00f0ff;
-            border-radius: 3px;
-        }
-
-        /* トグルスイッチ */
-        .toggle {
-            position: relative;
-            width: 46px;
-            height: 26px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 26px;
-            cursor: pointer;
-            transition: background 0.12s;
-            border: 1px solid rgba(0, 240, 255, 0.3);
-            touch-action: manipulation;
-            -webkit-tap-highlight-color: transparent;
-        }
-
-        .toggle .knob {
-            position: absolute;
-            left: 3px;
-            top: 3px;
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            background: #fff;
-            transition:
-                left 0.12s,
-                transform 0.12s;
-        }
-
-        .toggle.on {
-            background: linear-gradient(90deg,
-                    rgba(0, 240, 255, 0.4),
-                    rgba(0, 200, 255, 0.2));
-        }
-
-        .toggle.on .knob {
-            left: 23px;
-            transform: scale(0.98);
-            background: #00f0ff;
-            box-shadow: 0 0 5px #00f0ff;
-        }
-
-        .small-info {
-            position: fixed;
-            left: 12px;
-            top: 60px;
-            z-index: 1100;
-            font-size: 12px;
-            color: #00f0ff;
-            background: rgba(0, 0, 0, 0.4);
-            padding: 6px 8px;
-            border-radius: 4px;
-            border: 1px solid rgba(0, 240, 255, 0.3);
-            pointer-events: none;
-        }
-
-        /* リスト系UI */
-        #rankingList,
-        #roomList,
-        #roomPlayerList {
-            max-height: 300px;
-            overflow-y: auto;
-            text-align: left;
-            border: 1px solid rgba(0, 240, 255, 0.3);
-            border-radius: 4px;
-            padding: 8px;
-            margin-bottom: 16px;
-            background: rgba(0, 20, 40, 0.5);
-        }
-
-        #rankingList ol,
-        #roomPlayerList {
-            list-style-type: none;
-            padding: 0;
-            margin: 0;
-        }
-
-        #rankingList li,
-        .room-item,
-        #roomPlayerList li {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 8px;
-            border-bottom: 1px dashed rgba(0, 240, 255, 0.2);
-        }
-
-        #rankingList li:last-child,
-        .room-item:last-child,
-        #roomPlayerList li:last-child {
-            border-bottom: none;
-        }
-
-        #rankingList li span:first-child {
-            font-weight: bold;
-            color: #00f0ff;
-        }
-
-        #rankingList li span:last-child {
-            color: #fff;
-        }
-
-        input[type="range"] {
-            width: 140px;
-            accent-color: #00f0ff;
-            touch-action: manipulation;
-        }
-
-        input[type="text"],
-        input[type="number"],
-        select,
-        button {
-            touch-action: manipulation;
-            -webkit-tap-highlight-color: transparent;
-        }
-
-        /* マルチプレイ用追加スタイル */
-        #photonStatus {
-            position: fixed;
-            top: 12px;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 14px;
-            color: #00f0ff;
-            z-index: 1000;
-            font-weight: bold;
-            text-shadow: 0 0 5px #00f0ff;
-        }
-
-        #countdownUI {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 100px;
-            color: #00f0ff;
-            font-weight: bold;
-            z-index: 9999;
-            text-shadow: 0 0 30px #00f0ff;
-            display: none;
-            pointer-events: none;
-            text-align: center;
-        }
-
-        /* スポーンマップ */
-        #spawnMap {
-            background: rgba(0, 10, 20, 0.8);
-            border: 1px solid rgba(0, 240, 255, 0.4);
-            cursor: crosshair;
-            width: 240px;
-            height: 240px;
-            border-radius: 4px;
-            box-shadow: inset 0 0 20px rgba(0, 240, 255, 0.1);
-            margin: 8px auto 0 auto;
-            display: block;
-        }
-
-        .team-btn {
-            padding: 8px 14px;
-            margin: 4px 6px 4px 0;
-            font-size: 13px;
-            cursor: pointer;
-            background: rgba(0, 0, 0, 0.5);
-            color: #aaa;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-left: 4px solid #555;
-            border-radius: 2px;
-            transition: 0.2s;
-            font-weight: bold;
-            touch-action: manipulation;
-            -webkit-tap-highlight-color: transparent;
-        }
-
-        .team-1 {
-            border-left-color: #00f0ff;
-        }
-
-        .team-2 {
-            border-left-color: #ff0055;
-        }
-
-        .team-3 {
-            border-left-color: #00ff66;
-        }
-
-        .team-4 {
-            border-left-color: #ffb300;
-        }
-
-        .team-active.team-1 {
-            background: rgba(0, 240, 255, 0.15);
-            border-color: #00f0ff;
-            color: #00f0ff;
-            box-shadow: 0 0 10px rgba(0, 240, 255, 0.3);
-            text-shadow: 0 0 5px #00f0ff;
-        }
-
-        .team-active.team-2 {
-            background: rgba(255, 0, 85, 0.15);
-            border-color: #ff0055;
-            color: #ff0055;
-            box-shadow: 0 0 10px rgba(255, 0, 85, 0.3);
-            text-shadow: 0 0 5px #ff0055;
-        }
-
-        .team-active.team-3 {
-            background: rgba(0, 255, 102, 0.15);
-            border-color: #00ff66;
-            color: #00ff66;
-            box-shadow: 0 0 10px rgba(0, 255, 102, 0.3);
-            text-shadow: 0 0 5px #00ff66;
-        }
-
-        .team-active.team-4 {
-            background: rgba(255, 179, 0, 0.15);
-            border-color: #ffb300;
-            color: #ffb300;
-            box-shadow: 0 0 10px rgba(255, 179, 0, 0.3);
-            text-shadow: 0 0 5px #ffb300;
-        }
-
-        /* スマホ用レスポンシブ対応 */
-        @media (max-width: 768px) {
-            .game-modal {
-                width: 86vw !important;
-                max-width: 420px;
-                padding: 18px 14px;
-                box-sizing: border-box;
-            }
-
-            /* マルチプレイ待機室のレイアウトをモバイル用に最適化 */
-            #roomWaitModal {
-                width: 86vw !important;
-                max-width: 420px !important;
-            }
-
-            #roomWaitModal .room-wait-columns {
-                flex-direction: column !important;
-            }
-
-            #roomWaitModal .room-wait-col {
-                width: 100% !important;
-                margin-bottom: 12px;
-            }
-
-            #roomWaitModal .room-wait-col:last-child {
-                margin-bottom: 0;
-            }
-
-            /* スポーンマップをモバイルでは小さめに */
-            #roomWaitModal #spawnMap {
-                max-width: 200px;
-                max-height: 200px;
-            }
-
-            /* ボタン行のレイアウト */
-            #roomWaitModal .room-wait-actions {
-                flex-direction: column !important;
-                gap: 8px;
-            }
-
-            #roomWaitModal .room-wait-actions .cyber-btn {
-                width: 100% !important;
-            }
-
-            .hud {
-                font-size: 11px;
-                padding: 6px 10px;
-            }
-
-            .top-right {
-                font-size: 11px;
-                top: calc(10px + env(safe-area-inset-top, 0px));
-                right: calc(10px + env(safe-area-inset-right, 0px));
-            }
-
-            .settings-tab-bar {
-                font-size: 11px;
-            }
-
-            .settings-tab {
-                padding: 8px 10px;
-            }
-        }
-
-        @media (max-width: 600px) {
-            .game-modal {
-                width: 84vw !important;
-                max-width: 380px;
-                max-height: 80vh;
-                overflow-y: auto;
-                padding: 14px 10px;
-                box-sizing: border-box;
-            }
-
-            .game-modal h3 {
-                font-size: 16px;
-                margin-bottom: 10px;
-            }
-
-            .cyber-btn {
-                padding: 8px 14px;
-                font-size: 12px;
-            }
-
-            .setting-row {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 6px;
-                padding: 8px 4px;
-            }
-
-            .team-action-btn {
-                width: 100% !important;
-                margin-bottom: 6px;
-            }
-        }
-
-        @media (max-width: 400px) {
-            .game-modal {
-                width: 82vw !important;
-                max-width: 340px;
-                max-height: 78vh;
-                padding: 12px 8px;
-                box-sizing: border-box;
-            }
-
-            .game-modal h3 {
-                font-size: 14px;
-                letter-spacing: 2px;
-                margin-bottom: 8px;
-            }
-
-            .cyber-btn {
-                padding: 6px 10px;
-                font-size: 11px;
-            }
-        }
-
-        @media (max-height: 500px) {
-            .game-modal {
-                max-height: 85vh;
-                padding: 8px 8px;
-            }
-
-            .game-modal h3 {
-                font-size: 14px;
-                margin-bottom: 6px;
-            }
-
-            .cyber-btn {
-                padding: 5px 10px;
-                font-size: 11px;
-                margin: 2px;
-            }
-        }
-
-        /* ランキングタブ & 難易度ボタン */
-        .rank-tab {
-            opacity: 0.5;
-            transition:
-                opacity 0.2s,
-                border-color 0.2s;
-        }
-
-        .rank-tab-active {
-            opacity: 1 !important;
-            border-bottom: 2px solid #00f0ff;
-        }
-
-        .cyber-btn.btn-red:hover {
-            box-shadow: 0 0 18px rgba(255, 51, 85, 0.4);
-        }
-
-        .tp-input {
-            width: 60px;
-            background: #111;
-            border: 1px solid #444;
-            color: #fff;
-            padding: 4px;
-            font-family: inherit;
-        }
-
-        .tp-select {
-            background: #111;
-            border: 1px solid #444;
-            color: #00f0ff;
-            padding: 4px 8px;
-            font-family: inherit;
-        }
-
-        /* タッチUI (スマホ用コントロール) */
-        #touchUI {
-            display: none;
-            position: fixed;
-            inset: 0;
-            pointer-events: none;
-            z-index: 10;
-            touch-action: none;
-        }
-
-        #joystickArea {
-            position: absolute;
-            left: var(--safe-area-extra, 0px);
-            bottom: var(--safe-area-extra, 0px);
-            width: 50%;
-            height: 50%;
-            pointer-events: auto;
-        }
-
-        #joystickBase {
-            position: absolute;
-            width: 120px;
-            height: 120px;
-            background: rgba(0, 20, 40, 0.3);
-            border: 2px dashed rgba(0, 240, 255, 0.3);
-            border-radius: 50%;
-            transform: translate(-50%, -50%);
-            box-shadow: inset 0 0 20px rgba(0, 240, 255, 0.1);
-            display: none;
-            pointer-events: none;
-        }
-
-        #joystickNub {
-            position: absolute;
-            width: 50px;
-            height: 50px;
-            background: rgba(0, 240, 255, 0.6);
-            border-radius: 50%;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            box-shadow: 0 0 10px rgba(0, 240, 255, 0.8);
-        }
-
-        #touchBtns {
-            position: absolute;
-            right: calc(20px + var(--safe-area-extra, 0px));
-            bottom: calc(20px + var(--safe-area-extra, 0px));
-            width: 40%;
-            height: 50%;
-            pointer-events: none;
-        }
-
-        .touch-action-btn {
-            position: absolute;
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
-            background: rgba(0, 20, 40, 0.6);
-            border: 2px solid rgba(0, 240, 255, 0.4);
-            color: #00f0ff;
-            font-weight: bold;
-            font-size: 12px;
-            pointer-events: auto;
-            box-shadow:
-                0 0 15px rgba(0, 240, 255, 0.2),
-                inset 0 0 10px rgba(0, 240, 255, 0.1);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            user-select: none;
-            -webkit-user-select: none;
-            touch-action: manipulation;
-            -webkit-tap-highlight-color: transparent;
-        }
-
-        .touch-action-btn:active {
-            background: rgba(0, 240, 255, 0.3);
-            box-shadow: 0 0 20px rgba(0, 240, 255, 0.8);
-            transform: scale(0.95);
-        }
-
-        #btnTouchShoot {
-            right: 10px;
-            bottom: 10px;
-            width: 75px;
-            height: 75px;
-            font-size: 14px;
-            border-color: #ff0055;
-            color: #ff0055;
-            box-shadow:
-                0 0 15px rgba(255, 0, 85, 0.2),
-                inset 0 0 10px rgba(255, 0, 85, 0.1);
-        }
-
-        #btnTouchShoot:active {
-            background: rgba(255, 0, 85, 0.3);
-            box-shadow: 0 0 20px rgba(255, 0, 85, 0.8);
-        }
-
-        #btnTouchShoot.disabled {
-            opacity: 0.3;
-            border-color: #555;
-            color: #555;
-            box-shadow: none;
-            pointer-events: none;
-        }
-
-        #btnTouchPause {
-            top: calc(20px + var(--safe-area-extra, 0px));
-            left: 50%;
-            transform: translateX(-50%);
-            width: 50px;
-            height: 50px;
-            font-size: 18px;
-            letter-spacing: 2px;
-        }
-
-        #btnTouchPause:active {
-            transform: translateX(-50%) scale(0.95);
-        }
-
-        #btnTouchBoost {
-            right: 100px;
-            bottom: 100px;
-        }
-
-        #btnTouchBrake {
-            right: 170px;
-            bottom: 80px;
-            width: 50px;
-            height: 50px;
-            font-size: 12px;
-            border-color: #ffb300;
-            color: #ffb300;
-        }
-
-        #btnTouchBrake:active {
-            background: rgba(255, 179, 0, 0.3);
-            box-shadow: 0 0 20px rgba(255, 179, 0, 0.8);
-        }
-
-        #btnTouchRollLeft {
-            right: 180px;
-            bottom: 15px;
-            width: 50px;
-            height: 50px;
-            font-size: 10px;
-        }
-
-        #btnTouchRollRight {
-            right: 25px;
-            bottom: 110px;
-            width: 50px;
-            height: 50px;
-            font-size: 10px;
-        }
-
-        /* 横画面推奨メッセージ */
-        #landscapeWarning {
-            display: none;
-            position: fixed;
-            inset: 0;
-            z-index: 9000;
-            background: rgba(2, 5, 12, 0.92);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
-            justify-content: center;
-            align-items: center;
-            flex-direction: column;
-            text-align: center;
-            padding: 24px;
-            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-        }
-
-        #landscapeWarning .lw-icon {
-            font-size: 48px;
-            margin-bottom: 16px;
-            animation: lw-rotate 2s ease-in-out infinite;
-            filter: drop-shadow(0 0 12px #00f0ff);
-        }
-
-        @keyframes lw-rotate {
-
-            0%,
-            100% {
-                transform: rotate(0deg);
-            }
-
-            25% {
-                transform: rotate(90deg);
-            }
-
-            50%,
-            75% {
-                transform: rotate(90deg);
-            }
-        }
-
-        #landscapeWarning .lw-title {
-            font-size: 18px;
-            font-weight: 800;
-            color: #00f0ff;
-            text-shadow: 0 0 12px rgba(0, 240, 255, 0.8);
-            letter-spacing: 3px;
-            margin-bottom: 12px;
-            text-transform: uppercase;
-        }
-
-        #landscapeWarning .lw-desc {
-            font-size: 13px;
-            color: #cfe;
-            margin-bottom: 20px;
-            line-height: 1.6;
-        }
-
-        #landscapeWarning .lw-border {
-            width: 200px;
-            height: 2px;
-            background: linear-gradient(90deg, transparent, #00f0ff, transparent);
-            margin: 0 auto 20px auto;
-            box-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
-        }
-
-        #landscapeWarning .lw-dismiss {
-            padding: 10px 28px;
-            border-radius: 2px;
-            cursor: pointer;
-            background: linear-gradient(90deg,
-                    rgba(0, 0, 0, 0.6),
-                    rgba(0, 0, 0, 0.2));
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-left: 4px solid #00f0ff;
-            color: #00f0ff;
-            font-family: inherit;
-            font-weight: bold;
-            letter-spacing: 1.5px;
-            font-size: 13px;
-            text-transform: uppercase;
-            transition: all 0.2s ease;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
-            touch-action: manipulation;
-            -webkit-tap-highlight-color: transparent;
-        }
-
-        #landscapeWarning .lw-dismiss:active {
-            transform: scale(0.97);
-            background: rgba(255, 255, 255, 0.05);
-            border-color: #00f0ff;
-            box-shadow:
-                0 0 15px rgba(0, 240, 255, 0.3),
-                inset 0 0 10px rgba(0, 240, 255, 0.3);
-        }
-
-        /* ===== モーダルアニメーション ===== */
-        @keyframes modalIn {
-            from {
-                opacity: 0;
-                transform: translate(-50%, -50%) scale(0.92);
-            }
-
-            to {
-                opacity: 1;
-                transform: translate(-50%, -50%) scale(1);
-            }
-        }
-
-        @keyframes modalOut {
-            from {
-                opacity: 1;
-                transform: translate(-50%, -50%) scale(1);
-            }
-
-            to {
-                opacity: 0;
-                transform: translate(-50%, -50%) scale(0.92);
-            }
-        }
-
-        .game-modal.modal-enter {
-            animation: modalIn 0.22s ease-out forwards;
-        }
-
-        .game-modal.modal-leave {
-            animation: modalOut 0.15s ease-in forwards;
-            pointer-events: none;
-        }
-
-        /* ===== ボタン クリックリップル ===== */
-        .cyber-btn {
-            position: relative;
-            overflow: hidden;
-        }
-
-        .cyber-btn .btn-ripple {
-            position: absolute;
-            border-radius: 50%;
-            background: rgba(0, 240, 255, 0.25);
-            transform: scale(0);
-            animation: rippleAnim 0.45s ease-out forwards;
-            pointer-events: none;
-        }
-
-        .btn-red .btn-ripple {
-            background: rgba(255, 0, 85, 0.2);
-        }
-
-        .btn-green .btn-ripple {
-            background: rgba(0, 255, 102, 0.2);
-        }
-
-        .btn-pink .btn-ripple {
-            background: rgba(255, 0, 255, 0.2);
-        }
-
-        .btn-orange .btn-ripple {
-            background: rgba(255, 136, 0, 0.2);
-        }
-
-        @keyframes rippleAnim {
-            to {
-                transform: scale(3);
-                opacity: 0;
-            }
-        }
-
-        /* ===== トグルバウンスアニメーション ===== */
-        @keyframes toggleBounce {
-            0% {
-                transform: scale(1);
-            }
-
-            40% {
-                transform: scale(1.15);
-            }
-
-            100% {
-                transform: scale(0.98);
-            }
-        }
-
-        .toggle.bounce .knob {
-            animation: toggleBounce 0.2s ease-out;
-        }
-
-        /* ===== 設定タブUI ===== */
-        .settings-tab-bar {
-            display: flex;
-            border-bottom: 1px solid rgba(0, 240, 255, 0.2);
-            margin-bottom: 14px;
-            gap: 0;
-            font-size: 12px;
-        }
-
-        .settings-tab {
-            flex: 1;
-            padding: 10px 12px;
-            text-align: center;
-            cursor: pointer;
-            color: rgba(0, 240, 255, 0.4);
-            font-weight: bold;
-            letter-spacing: 1.5px;
-            text-transform: uppercase;
-            border-bottom: 2px solid transparent;
-            transition: color 0.2s, border-color 0.2s, background 0.2s;
-            touch-action: manipulation;
-            -webkit-tap-highlight-color: transparent;
-            user-select: none;
-        }
-
-        .settings-tab:hover {
-            color: rgba(0, 240, 255, 0.7);
-            background: rgba(0, 240, 255, 0.02);
-        }
-
-        .settings-tab.tab-active {
-            color: #00f0ff;
-            border-bottom-color: #00f0ff;
-            text-shadow: 0 0 6px rgba(0, 240, 255, 0.4);
-        }
-
-        .settings-tab-content {
-            display: none;
-            animation: tabFadeIn 0.2s ease-out;
-        }
-
-        .settings-tab-content.tab-visible {
-            display: block;
-        }
-
-        @keyframes tabFadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(4px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        /* ===== 設定セクションヘッダー ===== */
-        .settings-section-header {
-            font-size: 11px;
-            color: #00f0ff;
-            letter-spacing: 1.5px;
-            text-transform: uppercase;
-            margin: 14px 0 6px 0;
-            padding-bottom: 4px;
-            border-bottom: 1px solid rgba(0, 240, 255, 0.12);
-            opacity: 0.8;
-            font-weight: bold;
-        }
-
-        .settings-section-header:first-child {
-            margin-top: 0;
-        }
-    </style>
-</head>
-<!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-41CL8HB8FX"></script>
-<script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag() {
-        dataLayer.push(arguments);
-    }
-    gtag("js", new Date());
-
-    gtag("config", "G-41CL8HB8FX");
-</script>
-
-<body>
-    <div id="game-wrap">
-        <canvas id="game"></canvas>
-        <div class="top-right" id="stats"></div>
-        <div id="photonStatus"></div>
-        <div id="countdownUI">3</div>
-
-        <!-- 設定＆ポーズメニュー -->
-        <div id="pauseSettingsMenu" class="game-modal" role="dialog" aria-modal="true" aria-hidden="true"
-            style="display: none">
-            <h3 id="settingsMenuTitle">PAUSE MENU</h3>
-            <div style="font-size: 13px; color: #cfe; margin-bottom: 16px" id="pauseSubText">
-                Rキーでモード選択へ戻る
-            </div>
-
-            <!-- ポーズ中のメイン表示 -->
-            <div id="pauseMainView">
-                <button id="btnOpenSettingsView" class="cyber-btn" style="width: 80%; margin-bottom: 12px">
-                    設定 (SETTINGS)</button><br />
-                <button id="btnLeaveMultiplayer" class="cyber-btn btn-red"
-                    style="display: none; width: 80%; margin-bottom: 8px">
-                    ルームを退出
-                </button>
-                <button id="btnLeaveSingleplayer" class="cyber-btn btn-red"
-                    style="display: none; width: 80%; margin-bottom: 8px">
-                    ゲームを終了</button><br />
-                <button id="closePauseSettings" class="cyber-btn" style="width: 80%; margin-top: 8px">
-                    ゲームに戻る
-                </button>
-            </div>
-
-            <!-- 統合設定メニュー (タブ式) -->
-            <div id="pauseSettingsView" style="display: none">
-                <div class="settings-tab-bar">
-                    <div class="settings-tab tab-active" data-tab="display">DISPLAY</div>
-                    <div class="settings-tab" data-tab="audio">AUDIO</div>
-                    <div class="settings-tab" data-tab="controls">CONTROLS</div>
-                </div>
-
-                <!-- ===== DISPLAY タブ ===== -->
-                <div class="settings-tab-content tab-visible" data-tab-content="display">
-                    <div class="settings-container">
-                        <div class="settings-section-header">ビジュアル</div>
-                        <div class="setting-row">
-                            <div>すべて表示</div>
-                            <div id="toggleAll" class="toggle" role="switch" aria-checked="true" tabindex="0">
-                                <div class="knob"></div>
-                            </div>
-                        </div>
-                        <div class="setting-row">
-                            <div>背景の星</div>
-                            <div id="toggleStars" class="toggle" role="switch" aria-checked="true" tabindex="0">
-                                <div class="knob"></div>
-                            </div>
-                        </div>
-                        <div class="setting-row">
-                            <div>パーティクル</div>
-                            <div id="toggleParticles" class="toggle" role="switch" aria-checked="true" tabindex="0">
-                                <div class="knob"></div>
-                            </div>
-                        </div>
-                        <div class="setting-row">
-                            <div>グロー</div>
-                            <div id="toggleGlow" class="toggle" role="switch" aria-checked="true" tabindex="0">
-                                <div class="knob"></div>
-                            </div>
-                        </div>
-                        <div class="setting-row">
-                            <div>ダメージ表示</div>
-                            <div id="toggleDamage" class="toggle" role="switch" aria-checked="true" tabindex="0">
-                                <div class="knob"></div>
-                            </div>
-                        </div>
-                        <div class="setting-row">
-                            <div>ダメージ文字サイズ</div>
-                            <input type="range" id="damageTextSizeSlider" min="10" max="60" step="1" value="24" />
-                        </div>
-
-                        <div class="settings-section-header">ミニマップ</div>
-                        <div class="setting-row">
-                            <div>ミニマップ</div>
-                            <div id="toggleMinimap" class="toggle" role="switch" aria-checked="true" tabindex="0">
-                                <div class="knob"></div>
-                            </div>
-                        </div>
-                        <div class="setting-row">
-                            <div>障害物</div>
-                            <div id="toggleMinimapAsteroids" class="toggle" role="switch" aria-checked="true"
-                                tabindex="0">
-                                <div class="knob"></div>
-                            </div>
-                        </div>
-
-                        <div class="settings-section-header">パフォーマンス</div>
-                        <div class="setting-row">
-                            <div>軽量化モード</div>
-                            <div id="lightweightToggle" class="toggle" role="switch" aria-checked="false" tabindex="0">
-                                <div class="knob"></div>
-                            </div>
-                        </div>
-                        <div class="setting-row">
-                            <div>画面シェイク</div>
-                            <div id="toggleShake" class="toggle" role="switch" aria-checked="true" tabindex="0">
-                                <div class="knob"></div>
-                            </div>
-                        </div>
-                        <div class="setting-row">
-                            <div>シェイク強度</div>
-                            <input type="range" id="shakeIntensitySlider" min="0" max="100" step="5" value="100" />
-                        </div>
-
-                        <div class="settings-section-header">システム</div>
-                        <div class="setting-row">
-                            <div>画面の角丸マージン</div>
-                            <div style="display:flex;align-items:center;gap:8px;">
-                                <input type="range" id="safeAreaSlider" min="0" max="60" step="1" value="0" />
-                                <span id="safeAreaValue" style="font-size:12px;color:#00f0ff;min-width:30px;text-align:right;">0px</span>
-                            </div>
-                        </div>
-                        <div class="setting-row">
-                            <div>全画面表示</div>
-                            <div id="toggleFullscreen" class="toggle" role="switch" aria-checked="false" tabindex="0">
-                                <div class="knob"></div>
-                            </div>
-                        </div>
-                        <div class="setting-row">
-                            <div>デベロッパーモード</div>
-                            <div id="toggleDevMode" class="toggle" role="switch" tabindex="0">
-                                <div class="knob"></div>
-                            </div>
-                        </div>
-                        <div style="font-size: 11px; color: rgba(0,240,255,0.5); margin-top: 6px; text-align: left;">
-                            ※ +/- キーで画面のズームが可能です。
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ===== AUDIO タブ ===== -->
-                <div class="settings-tab-content" data-tab-content="audio">
-                    <div class="settings-container">
-                        <div class="setting-row">
-                            <span>BGM 音量</span>
-                            <input type="range" id="bgmVolume" min="0" max="1" step="0.01" value="0.3" />
-                        </div>
-                        <div class="setting-row">
-                            <span>効果音 音量</span>
-                            <input type="range" id="sfxVolume" min="0" max="2" step="0.01" value="0.4" />
-                        </div>
-                        <div class="setting-row">
-                            <span>ブースト効果音</span>
-                            <div id="toggleBoostSound" class="toggle" role="switch" tabindex="0">
-                                <div class="knob"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ===== CONTROLS タブ ===== -->
-                <div class="settings-tab-content" data-tab-content="controls">
-                    <div class="settings-container">
-                        <div class="setting-row">
-                            <div>操作モード (ON:マウス / OFF:キーボード)</div>
-                            <div id="toggleControlMode" class="toggle" role="switch" tabindex="0">
-                                <div class="knob"></div>
-                            </div>
-                        </div>
-                        <div class="setting-row">
-                            <div>スマホ用操作UI</div>
-                            <div id="toggleTouchUI" class="toggle" role="switch" tabindex="0">
-                                <div class="knob"></div>
-                            </div>
-                        </div>
-                        <button id="openKeymapFromMenu" class="cyber-btn" style="width: 100%; margin-top: 12px">
-                            キー設定を開く
-                        </button>
-                    </div>
-                </div>
-
-                <!-- 下部ボタン -->
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px;">
-                    <button id="changeNicknameBtn" class="cyber-btn"
-                        style="font-size: 11px; padding: 6px 12px;">名前を変更</button>
-                    <div style="font-size: 10px; color: rgba(0,240,255,0.4); letter-spacing: 1px;">v<span
-                            id="versionText"></span></div>
-                    <button id="btnBackToPauseMain" class="cyber-btn"
-                        style="font-size: 11px; padding: 6px 12px;">戻る</button>
-                </div>
-            </div>
-        </div>
-
-        <div id="keymapModal" class="game-modal" role="dialog" aria-modal="true" style="display: none">
-            <h3>KEY CONFIG</h3>
-            <div id="km-list"></div>
-            <div id="bindingNotice" style="margin-top: 12px; font-size: 12px">
-                変更したい操作の「変更」を押し、新しいキーを押してください。Escでキャンセルします。
-            </div>
-            <div id="km-close" style="
-            margin-top: 16px;
-            display: flex;
-            justify-content: space-between;
-          ">
-                <button id="resetDefaults" class="cyber-btn">初期化</button>
-                <button id="closeKeymap" class="cyber-btn">閉じる</button>
-            </div>
-        </div>
-
-
-        <div class="hud">
-            <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / <kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd>
-            <span>/</span>
-            <kbd>Space</kbd><kbd>Shift</kbd><kbd>Q</kbd><kbd>E</kbd>
-            <span style="margin-left: 12px" id="hudHintText">(P=ポーズ/メニュー, R=戻る, H=ヘルプ)</span>
-        </div>
-        <div class="audio-hint" id="audioHint" style="display: none">
-            画面をクリックまたはキーボードを押してゲームを開始（音声が有効になります）
-        </div>
-    </div>
-
-    <!-- スマホ用タッチUI -->
-    <div id="touchUI">
-        <div id="joystickArea"></div>
-        <div id="joystickBase">
-            <div id="joystickNub"></div>
-        </div>
-        <div id="touchBtns">
-            <div id="btnTouchRollLeft" class="touch-action-btn">L-SLIDE</div>
-            <div id="btnTouchBoost" class="touch-action-btn">BOOST</div>
-            <div id="btnTouchBrake" class="touch-action-btn">STOP</div>
-            <div id="btnTouchRollRight" class="touch-action-btn">R-SLIDE</div>
-            <div id="btnTouchShoot" class="touch-action-btn">SHOOT</div>
-        </div>
-        <div id="btnTouchPause" class="touch-action-btn">||</div>
-    </div>
-
-    <!-- 横画面推奨メッセージ -->
-    <div id="landscapeWarning">
-        <div class="lw-icon">📱</div>
-        <div class="lw-title">ROTATE DEVICE</div>
-        <div class="lw-border"></div>
-        <div class="lw-desc">このゲームは横画面でのプレイを推奨しています。</div>
-        <button class="lw-dismiss" id="btnDismissLandscape">
-            このまま続ける
-        </button>
-    </div>
-
-    <!-- ニックネーム設定 -->
-    <div id="nicknameModal" class="game-modal" style="display: none">
-        <h3 id="nicknameModalTitle">PILOT REGISTRATION</h3>
-        <p id="nicknameModalDesc">
-            ランキングやマルチプレイで使用する名前を入力してください。
-        </p>
-        <input type="text" id="nicknameInput" maxlength="12" placeholder="コールサイン" />
-        <br />
-        <button id="saveNicknameBtn" class="cyber-btn">システム起動</button>
-    </div>
-
-    <!-- モード選択 -->
-    <div id="modeSelectModal" class="game-modal" style="display: none">
-        <h3>MODE SELECT</h3>
-        <button id="btnSinglePlayer" class="cyber-btn" style="margin-bottom: 12px; width: 80%">
-            シングルプレイ</button><br />
-        <button id="btnMultiPlayer" class="cyber-btn" style="margin-bottom: 12px; width: 80%">
-            マルチプレイ</button><br />
-        <button id="btnShowRanking" class="cyber-btn btn-pink" style="margin-bottom: 12px; width: 80%">
-            ランキング</button><br />
-        <button id="btnTestPlay" class="cyber-btn btn-orange" style="margin-bottom: 12px; width: 80%; display: none">
-            テストプレイ</button><br />
-        <button id="btnHomeSettings" class="cyber-btn btn-green" style="width: 80%">
-            設定
-        </button>
-    </div>
-
-    <!-- 難易度選択 -->
-    <div id="difficultyModal" class="game-modal" style="display: none">
-        <h3>DIFFICULTY</h3>
-        <p style="font-size: 13px; color: #aaa; margin-bottom: 16px">
-            難易度を選択してください
-        </p>
-        <button id="btnEasy" class="cyber-btn btn-green" style="margin-bottom: 12px; width: 80%">
-            <span style="font-size: 16px; letter-spacing: 2px">EASY</span><br />
-            <span style="font-size: 11px; color: #aaa; font-weight: normal">敵の動きが緩やか</span></button><br />
-        <button id="btnNormal" class="cyber-btn" style="margin-bottom: 12px; width: 80%">
-            <span style="font-size: 16px; letter-spacing: 2px">NORMAL</span><br />
-            <span style="font-size: 11px; color: #aaa; font-weight: normal">標準的な難易度</span></button><br />
-        <button id="btnHard" class="cyber-btn btn-red" style="margin-bottom: 12px; width: 80%">
-            <span style="font-size: 16px; letter-spacing: 2px">HARD</span><br />
-            <span style="font-size: 11px; color: #aaa; font-weight: normal">高度な戦術AI</span></button><br />
-        <button id="btnBackFromDifficulty" class="cyber-btn" style="width: 50%; margin-top: 8px">
-            戻る
-        </button>
-    </div>
-
-    <!-- テストプレイ -->
-    <div id="testPlayModal" class="game-modal" style="display: none; max-height: 80vh; overflow-y: auto">
-        <h3>TEST PLAY</h3>
-        <div class="settings-container" style="text-align: left">
-            <div style="
-            font-size: 12px;
-            color: #00f0ff;
-            margin-bottom: 6px;
-            letter-spacing: 1px;
-          ">
-                TEAMS
-            </div>
-            <div class="setting-row">
-                <div>チーム数</div>
-                <select id="tpTeamCount" style="
-              background: #111;
-              border: 1px solid #444;
-              color: #00f0ff;
-              padding: 4px 8px;
-            ">
-                    <option value="2" selected>2</option>
-                    <option value="3">3</option>
-                    <option value="4">4</option>
-                </select>
-            </div>
-            <div id="tpTeamsConfig">
-                <div class="tp-team-block" data-team="1" style="
-              border-left: 3px solid #00f0ff;
-              padding-left: 8px;
-              margin: 8px 0;
-            ">
-                    <div style="font-size: 11px; color: #00f0ff; margin-bottom: 4px">
-                        TEAM 1 (プレイヤー)
-                    </div>
-                    <div class="setting-row">
-                        <div>AI数</div>
-                        <input type="number" class="tp-input tpTeamAi" value="5" min="0" max="50" />
-                    </div>
-                    <div class="setting-row">
-                        <div>AI難易度</div>
-                        <select class="tp-select tpTeamDiff">
-                            <option value="easy">EASY</option>
-                            <option value="normal" selected>NORMAL</option>
-                            <option value="hard">HARD</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="tp-team-block" data-team="2" style="
-              border-left: 3px solid #ff3355;
-              padding-left: 8px;
-              margin: 8px 0;
-            ">
-                    <div style="font-size: 11px; color: #ff3355; margin-bottom: 4px">
-                        TEAM 2
-                    </div>
-                    <div class="setting-row">
-                        <div>AI数</div>
-                        <input type="number" class="tp-input tpTeamAi" value="5" min="0" max="50" />
-                    </div>
-                    <div class="setting-row">
-                        <div>AI難易度</div>
-                        <select class="tp-select tpTeamDiff">
-                            <option value="easy">EASY</option>
-                            <option value="normal" selected>NORMAL</option>
-                            <option value="hard">HARD</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="tp-team-block" data-team="3" style="
-              border-left: 3px solid #00ff88;
-              padding-left: 8px;
-              margin: 8px 0;
-              display: none;
-            ">
-                    <div style="font-size: 11px; color: #00ff88; margin-bottom: 4px">
-                        TEAM 3
-                    </div>
-                    <div class="setting-row">
-                        <div>AI数</div>
-                        <input type="number" class="tp-input tpTeamAi" value="3" min="0" max="50" />
-                    </div>
-                    <div class="setting-row">
-                        <div>AI難易度</div>
-                        <select class="tp-select tpTeamDiff">
-                            <option value="easy">EASY</option>
-                            <option value="normal" selected>NORMAL</option>
-                            <option value="hard">HARD</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="tp-team-block" data-team="4" style="
-              border-left: 3px solid #ffaa00;
-              padding-left: 8px;
-              margin: 8px 0;
-              display: none;
-            ">
-                    <div style="font-size: 11px; color: #ffaa00; margin-bottom: 4px">
-                        TEAM 4
-                    </div>
-                    <div class="setting-row">
-                        <div>AI数</div>
-                        <input type="number" class="tp-input tpTeamAi" value="3" min="0" max="50" />
-                    </div>
-                    <div class="setting-row">
-                        <div>AI難易度</div>
-                        <select class="tp-select tpTeamDiff">
-                            <option value="easy">EASY</option>
-                            <option value="normal" selected>NORMAL</option>
-                            <option value="hard">HARD</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
-            <div class="setting-row">
-                <div>プレイヤー所属チーム</div>
-                <select id="tpPlayerTeam" style="
-              background: #111;
-              border: 1px solid #444;
-              color: #00f0ff;
-              padding: 4px 8px;
-            ">
-                    <option value="1" selected>TEAM 1</option>
-                    <option value="2">TEAM 2</option>
-                    <option value="3">TEAM 3</option>
-                    <option value="4">TEAM 4</option>
-                </select>
-            </div>
-            <div class="setting-row">
-                <div>観戦モード (AIのみ)</div>
-                <div id="toggleSpectate" class="toggle" role="switch" tabindex="0">
-                    <div class="knob"></div>
-                </div>
-            </div>
-
-            <div style="height: 8px"></div>
-            <div style="
-            font-size: 12px;
-            color: #00f0ff;
-            margin-bottom: 6px;
-            letter-spacing: 1px;
-          ">
-                PLAYER
-            </div>
-            <div class="setting-row">
-                <div>HP</div>
-                <input type="number" id="tpPlayerHp" class="tp-input" value="250" min="1" max="9999" />
-            </div>
-            <div class="setting-row">
-                <div>弾速</div>
-                <input type="number" id="tpPlayerBulletSpeed" class="tp-input" value="47" min="1" max="200" />
-            </div>
-            <div class="setting-row">
-                <div>残機</div>
-                <input type="number" id="tpPlayerLives" class="tp-input" value="3" min="0" max="99" />
-            </div>
-
-            <div style="height: 8px"></div>
-            <div style="
-            font-size: 12px;
-            color: #00f0ff;
-            margin-bottom: 6px;
-            letter-spacing: 1px;
-          ">
-                AI STATS
-            </div>
-            <div class="setting-row">
-                <div>HP</div>
-                <input type="number" id="tpAiHp" class="tp-input" value="45" min="1" max="9999" />
-            </div>
-            <div class="setting-row">
-                <div>射撃間隔(ms)</div>
-                <input type="number" id="tpAiShootCd" class="tp-input" value="140" min="10" max="1000" />
-            </div>
-            <div class="setting-row">
-                <div>旋回速度</div>
-                <input type="number" id="tpAiTurnSpeed" class="tp-input" value="0.10" min="0.01" max="1" step="0.01" />
-            </div>
-            <div class="setting-row">
-                <div>推力</div>
-                <input type="number" id="tpAiThrust" class="tp-input" value="0.10" min="0.01" max="1" step="0.01" />
-            </div>
-            <div class="setting-row">
-                <div>最高速度</div>
-                <input type="number" id="tpAiMaxSpeed" class="tp-input" value="5.5" min="1" max="20" step="0.1" />
-            </div>
-
-            <div style="height: 8px"></div>
-            <div style="
-            font-size: 12px;
-            color: #00f0ff;
-            margin-bottom: 6px;
-            letter-spacing: 1px;
-          ">
-                WORLD
-            </div>
-            <div class="setting-row">
-                <div>階石数</div>
-                <input type="number" id="tpAsteroidCount" class="tp-input" value="20" min="0" max="200" />
-            </div>
-            <div class="setting-row">
-                <div>ワールド幅</div>
-                <input type="number" id="tpWorldW" class="tp-input" value="4000" min="500" max="20000" step="100" />
-            </div>
-            <div class="setting-row">
-                <div>ワールド高さ</div>
-                <input type="number" id="tpWorldH" class="tp-input" value="4000" min="500" max="20000" step="100" />
-            </div>
-
-            <div style="height: 8px"></div>
-            <div style="
-            font-size: 12px;
-            color: #00f0ff;
-            margin-bottom: 6px;
-            letter-spacing: 1px;
-          ">
-                RULES
-            </div>
-            <div class="setting-row">
-                <div>ウェーブ自動生成</div>
-                <div id="toggleWaveSpawn" class="toggle on" role="switch" tabindex="0">
-                    <div class="knob"></div>
-                </div>
-            </div>
-            <div class="setting-row">
-                <div>フレンドリーファイア</div>
-                <div id="toggleFriendlyFire" class="toggle" role="switch" tabindex="0">
-                    <div class="knob"></div>
-                </div>
-            </div>
-            <div class="setting-row">
-                <div>パワーアップ</div>
-                <div id="togglePowerups" class="toggle on" role="switch" tabindex="0">
-                    <div class="knob"></div>
-                </div>
-            </div>
-        </div>
-        <div style="display: flex; justify-content: space-between; margin-top: 16px">
-            <button id="btnBackFromTestPlay" class="cyber-btn" style="padding: 8px 16px">
-                戻る
-            </button>
-            <button id="btnStartTestPlay" class="cyber-btn btn-green" style="padding: 8px 24px">
-                START
-            </button>
-        </div>
-    </div>
-
-    <div id="lobbyModal" class="game-modal" style="display: none; width: 500px">
-        <h3>MATCHING LOBBY</h3>
-        <button id="btnOpenCreateRoomModal" class="cyber-btn" style="margin-bottom: 16px; width: 80%">
-            新しくルームを作成
-        </button>
-        <div id="roomList" style="font-size: 12px">ルーム一覧を取得中...</div>
-        <button id="btnBackToMode" class="cyber-btn" style="margin-top: 12px; width: 40%">
-            戻る
-        </button>
-    </div>
-
-    <!-- ルーム作成モーダル -->
-    <div id="createRoomModal" class="game-modal" style="display: none; width: 400px; z-index: 2100">
-        <h3>CREATE ROOM</h3>
-        <div style="margin-bottom: 16px">
-            <p style="margin-bottom: 8px; font-size: 13px; color: #00f0ff">
-                ルーム名を入力してください
-            </p>
-            <input type="text" id="roomNameInput" maxlength="15" placeholder="空欄で自分の名前"
-                style="width: 80%; margin-bottom: 8px" />
-        </div>
-        <div style="display: flex; justify-content: space-between">
-            <button id="btnCancelCreateRoom" class="cyber-btn btn-red" style="width: 45%">
-                キャンセル
-            </button>
-            <button id="btnConfirmCreateRoom" class="cyber-btn" style="width: 45%">
-                作成
-            </button>
-        </div>
-    </div>
-
-    <!-- ルーム待機室（マルチプレイのメイン準備画面） -->
-    <div id="roomWaitModal" class="game-modal" style="display: none; width: 640px">
-        <h3>ROOM STANDBY</h3>
-        <div class="room-wait-columns" style="
-          display: flex;
-          justify-content: space-between;
-          text-align: left;
-          margin-bottom: 16px;
-          gap: 12px;
-        ">
-            <!-- 左側：プレイヤーとチーム選択 -->
-            <div class="room-wait-col" style="width: 48%">
-                <div style="
-              background: rgba(0, 20, 40, 0.5);
-              border: 1px dashed rgba(0, 240, 255, 0.3);
-              padding: 12px;
-              border-radius: 4px;
-              box-shadow: inset 0 0 10px rgba(0, 240, 255, 0.1);
-            ">
-                    <h4 style="margin-top: 0">参加中のパイロット</h4>
-                    <ul id="roomPlayerList" style="max-height: 140px; margin-bottom: 0"></ul>
-                </div>
-
-                <div style="
-              margin-top: 12px;
-              background: rgba(0, 0, 0, 0.4);
-              padding: 8px;
-              border-radius: 4px;
-              border: 1px dashed rgba(0, 240, 255, 0.3);
-              box-shadow: inset 0 0 10px rgba(0, 240, 255, 0.1);
-            ">
-                    <span style="font-size: 12px; color: #00f0ff">所属チームの選択:</span>
-                    <div id="teamSelector" style="display: flex; flex-wrap: wrap; margin-top: 4px">
-                        <!-- JSでボタンが生成される -->
-                    </div>
-                    <div style="
-                display: flex;
-                flex-wrap: wrap;
-                gap: 4px;
-                justify-content: flex-end;
-                margin-top: 8px;
-              ">
-                        <button id="btnRemoveTeam" class="cyber-btn btn-red"
-                            style="display: none; font-size: 11px; padding: 6px 12px">
-                            － チーム削除
-                        </button>
-                        <button id="btnAddTeam" class="cyber-btn"
-                            style="display: none; font-size: 11px; padding: 6px 12px">
-                            ＋ チーム追加
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 右側：ミニマップと設定 -->
-            <div class="room-wait-col" style="
-            width: 48%;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-          ">
-                <div style="
-              background: rgba(0, 20, 40, 0.5);
-              border: 1px dashed rgba(0, 240, 255, 0.3);
-              padding: 12px;
-              border-radius: 4px;
-              box-shadow: inset 0 0 10px rgba(0, 240, 255, 0.1);
-              width: 100%;
-              box-sizing: border-box;
-            ">
-                    <h4 style="width: 100%; text-align: left; margin-top: 0">
-                        降下ポイントの指定
-                    </h4>
-                    <p id="spawnMapDesc" style="
-                font-size: 11px;
-                margin: 0 0 8px 0;
-                color: #aaa;
-                width: 100%;
-                text-align: left;
-              ">
-                        ホストはマップ上のピンをドラッグして降下ポイントを指定できます。
-                    </p>
-                    <canvas id="spawnMap" style="width: 100%; height: auto; aspect-ratio: 1/1; margin: 0"></canvas>
-                </div>
-
-                <button id="btnOpenRoomSettings" class="cyber-btn" style="
-              font-size: 12px;
-              padding: 6px 8px;
-              margin-top: 12px;
-              display: none;
-              width: 100%;
-            ">
-                    詳細なルーム設定 (ホスト専用)
-                </button>
-            </div>
-        </div>
-
-        <div class="room-wait-actions" style="display: flex; justify-content: space-between">
-            <button id="btnLeaveRoom" class="cyber-btn btn-red" style="width: 30%">
-                退出
-            </button>
-            <button id="btnStartGame" class="cyber-btn" style="
-            width: 65%;
-            font-size: 16px;
-            display: none;
-            background: rgba(0, 240, 255, 0.2);
-          ">
-                ミッション開始
-            </button>
-        </div>
-    </div>
-
-    <!-- ルーム設定用モーダル -->
-    <div id="roomSettingsModal" class="game-modal" style="display: none; width: 540px; z-index: 2100">
-        <h3>ROOM SETTINGS</h3>
-        <div class="setting-row">
-            <label>アステロイドの配置</label>
-            <input type="checkbox" id="settingAsteroids" checked />
-        </div>
-        <div class="setting-row">
-            <label>マップサイズ (初期: 10000)</label>
-            <input type="number" id="settingMapSize" value="10000" min="2000" max="50000" step="1000"
-                style="width: 70px" />
-        </div>
-        <div class="setting-row">
-            <label>プレイヤーの最大HP (Life)</label>
-            <input type="number" id="settingPlayerHp" value="250" min="50" max="2000" style="width: 70px" />
-        </div>
-        <div class="setting-row">
-            <label>プレイヤーの残機 (Lives)</label>
-            <input type="number" id="settingPlayerLives" value="5" min="0" max="100" style="width: 70px" />
-        </div>
-
-        <p style="
-          font-size: 13px;
-          margin: 12px 0 8px 0;
-          color: #00f0ff;
-          text-align: left;
-          border-bottom: 1px dashed rgba(0, 240, 255, 0.4);
-        ">
-            チームごとのAI（味方機）設定
-        </p>
-        <div style="
-          max-height: 180px;
-          overflow-y: auto;
-          padding-right: 10px;
-          text-align: left;
-        ">
-            <div id="teamSettingsContainer"></div>
-        </div>
-        <button id="btnApplyRoomSettings" class="cyber-btn" style="margin-top: 16px; width: 100%">
-            適用して閉じる
-        </button>
-    </div>
-
-    <!-- リザルト画面 -->
-    <div id="resultModal" class="game-modal" style="display: none; width: 500px; z-index: 2200">
-        <h2 id="resultTitle" style="color: #00f0ff; text-shadow: 0 0 15px #00f0ff">
-            MISSION COMPLETE
-        </h2>
-        <div id="resultList" style="
-        max-height: 250px;
-          overflow-y: auto;
-          text-align: left;
-          background: rgba(0, 0, 0, 0.5);
-          padding: 10px;
-          border: 1px solid #00f0ff;
-          margin-bottom: 16px;
-          font-family: ui-monospace, monospace;
-          font-size: 14px;
-        "></div>
-        <button id="btnResultToHome" class="cyber-btn" style="width: 100%">
-            ホームに戻る
-        </button>
-    </div>
-    <div id="rankingModal" class="game-modal" style="display: none">
-        <h3>TOP PILOTS</h3>
-        <div id="rankingTabs" style="
-          display: flex;
-          justify-content: center;
-          gap: 4px;
-          margin-bottom: 12px;
-        ">
-            <button class="cyber-btn btn-green rank-tab" data-diff="easy" style="padding: 6px 14px; font-size: 11px">
-                EASY
-            </button>
-            <button class="cyber-btn rank-tab rank-tab-active" data-diff="normal"
-                style="padding: 6px 14px; font-size: 11px">
-                NORMAL
-            </button>
-            <button class="cyber-btn btn-red rank-tab" data-diff="hard" style="padding: 6px 14px; font-size: 11px">
-                HARD
-            </button>
-        </div>
-        <div id="rankingList" style="font-size: 14px">ランキング取得中...</div>
-        <button id="closeRankingBtn" class="cyber-btn">閉じる</button>
-    </div>
-
-
-    <script>
         /* 2D 宇宙ドッグファイト - Photon + Firestore オンライン対応版 (完全版) */
         window.addEventListener("contextmenu", (e) => {
             e.preventDefault();
@@ -2414,13 +504,14 @@
         let showGlow = !!featureSettings.glow;
         let showMinimapAsteroids = !!featureSettings.minimapAsteroids;
         let damageTextBaseSize = 24;
-        let zoomLevel = 1.0;
+        let zoomLevel = parseFloat(localStorage.getItem("zoomLevel_v1")) || 1.0;
         let showDamage = featureSettings.showDamage !== false;
         let enableShake = featureSettings.enableShake !== false;
         let shakeIntensity =
             featureSettings.shakeIntensity !== undefined
                 ? featureSettings.shakeIntensity
                 : 1.0;
+        let safeAreaMargin = featureSettings.safeAreaMargin || 0;
         function applyFeatureSettingsToRuntime() {
             showStars = !!featureSettings.stars;
             showMinimap = !!featureSettings.minimap;
@@ -2437,6 +528,10 @@
                 featureSettings.shakeIntensity !== undefined
                     ? featureSettings.shakeIntensity
                     : 1.0;
+            safeAreaMargin = featureSettings.safeAreaMargin || 0;
+            document.documentElement.style.setProperty('--safe-area-extra', safeAreaMargin + 'px');
+            const safeAreaValue = document.getElementById("safeAreaValue");
+            if (safeAreaValue) safeAreaValue.innerText = safeAreaMargin + "px";
         }
         applyFeatureSettingsToRuntime();
 
@@ -2672,10 +767,12 @@
             }
             if (k === "+" || k === ";") {
                 zoomLevel = Math.min(zoomLevel + 0.1, 3.0);
+                localStorage.setItem("zoomLevel_v1", zoomLevel.toString());
                 e.preventDefault();
             }
             if (k === "-") {
                 zoomLevel = Math.max(zoomLevel - 0.1, 0.3);
+                localStorage.setItem("zoomLevel_v1", zoomLevel.toString());
                 e.preventDefault();
             }
         });
@@ -2696,8 +793,10 @@
             if (!running || isPaused || matchEnded) return;
             if (e.deltaY < 0) {
                 zoomLevel = Math.min(zoomLevel + 0.1, 3.0);
+                localStorage.setItem("zoomLevel_v1", zoomLevel.toString());
             } else if (e.deltaY > 0) {
                 zoomLevel = Math.max(zoomLevel - 0.1, 0.3);
+                localStorage.setItem("zoomLevel_v1", zoomLevel.toString());
             }
         });
 
@@ -2914,6 +1013,7 @@
                     let dist = Math.hypot(dx, dy);
                     let diff = dist - initialPinchDistance;
                     zoomLevel = Math.max(0.3, Math.min(zoomLevel + diff * 0.005, 3.0));
+                    localStorage.setItem("zoomLevel_v1", zoomLevel.toString());
                     initialPinchDistance = dist;
                 }
             },
@@ -3634,6 +1734,29 @@
                 } else if (code === 8) {
                     // アステロイド初期化
                     asteroids = content.map((a) => ({ ...a }));
+                } else if (code === 7) {
+                    // ダメージ同期 (ホスト権限による集約)
+                    const target = ships.find(s => s.id === content.targetId);
+                    if (target) {
+                        target.hp = content.newHp;
+                        if (showDamage) {
+                            floatingTexts.push(
+                                new FloatingText(target.x, target.y, `-${content.damage}`, "#ff0055", 1.0, damageTextBaseSize)
+                            );
+                        }
+                        if (target.hp <= 0 && !target.isGhost) {
+                            target.isGhost = true;
+                            spawnExplosion(target.x, target.y, 28, 2.2, "large");
+                            spawnSmoke(target.x, target.y, 20, 4.0);
+                            if (target.id === playerId) {
+                                lives -= 1;
+                                shakeCamera(20);
+                                if (lives > 0) {
+                                    setTimeout(() => respawnMultiplayerPlayer(), 2000);
+                                }
+                            }
+                        }
+                    }
                 }
             };
 
@@ -3725,7 +1848,7 @@
             cameraShake = 0;
             idGen = 2;
             wave = 1;
-            score = 0;
+            ScoreManager.reset();
             powerupsEnabled = true;
             message = window.isMultiplayer
                 ? "TEAM DEATHMATCH: 生き残れ"
@@ -3940,6 +2063,7 @@
                     }
                 }, 20); // Increased sync rate to 50Hz
             }
+            TimeManager.setStartTime(Date.now());
             running = true;
             updateTouchUIVisibility();
         }
@@ -4188,8 +2312,44 @@
 
         /* ========== 更新ルーチン ========== */
         let last = performance.now();
-        let score = 0,
-            lives = 5,
+        // チート対策: スコアのメモリ秘匿
+        const ScoreManager = (function () {
+            let _scoreKey = Math.floor(Math.random() * 100000000);
+            let _encScore = 0 ^ _scoreKey;
+            return {
+                add: function (val) {
+                    let current = _encScore ^ _scoreKey;
+                    current += val;
+                    _scoreKey = Math.floor(Math.random() * 100000000);
+                    _encScore = current ^ _scoreKey;
+                },
+                get: function () {
+                    return _encScore ^ _scoreKey;
+                },
+                reset: function () {
+                    _scoreKey = Math.floor(Math.random() * 100000000);
+                    _encScore = 0 ^ _scoreKey;
+                }
+            };
+        })();
+        
+        // チート対策: プレイ開始時間のメモリ秘匿
+        const TimeManager = (function () {
+            let _timeKey = Math.floor(Math.random() * 100000000);
+            let _encTime = 0 ^ _timeKey;
+            return {
+                setStartTime: function (val) {
+                    let v = Math.floor(val);
+                    _timeKey = Math.floor(Math.random() * 100000000);
+                    _encTime = v ^ _timeKey;
+                },
+                getStartTime: function () {
+                    return _encTime ^ _timeKey;
+                }
+            };
+        })();
+
+        let lives = 5,
             wave = 1,
             message = "";
         let gameOverMode = false;
@@ -4205,7 +2365,7 @@
 
         function addScore(v, x, y) {
             if (gameOverMode || window.isMultiplayer) return; // マルチプレイはスコア加算なし
-            score += v;
+            ScoreManager.add(v);
             if (x !== undefined && y !== undefined) {
                 const size = Math.max(10, damageTextBaseSize * 0.8);
                 floatingTexts.push(
@@ -4222,10 +2382,26 @@
         }
 
         async function handleGameOverSubmit() {
+            const currentScore = ScoreManager.get();
+            const startT = TimeManager.getStartTime();
+            
+            // TimeManagerに全く値が入っていない状態（デフォルト値等）の場合は 0 秒扱い
+            const playTimeSeconds = startT === 0 ? 0 : (Date.now() - startT) / 1000;
+
+            // 時間整合性チェック (1秒あたり最大300点稼げると仮定)
+            // 例: 即座に全敵を破壊した場合のバッファも少々加味
+            const maxPossibleScore = Math.max(3000, playTimeSeconds * 300);
+
+            if (currentScore > maxPossibleScore) {
+                console.warn("異常なスコアを検出しました");
+                message = "SCORE ERROR - 無効なプレイデータです";
+                return;
+            }
+
             message = `MISSION FAILED - スコア送信中...`;
             const diff = window.currentDifficulty || "normal";
             if (window.submitScoreToServer)
-                await window.submitScoreToServer(score, diff);
+                await window.submitScoreToServer(currentScore, diff, playTimeSeconds);
             message = `MISSION FAILED - ランキング取得中...`;
             if (window.fetchTopRanks)
                 displayRanking(await window.fetchTopRanks(diff));
@@ -5027,10 +3203,22 @@
                         const isMine =
                             s.id === playerId ||
                             (!window.isMultiplayer && s.ai) ||
-                            (window.isMultiplayer && isRoomHost() && s.ai && !s.isRemoteAI);
+                            (window.isMultiplayer && isRoomHost()); // マルチプレイ時はホストが全判定
 
                         if (isMine) {
-                            s.hp -= 20;
+                            const damage = 20;
+                            s.hp -= damage;
+                            
+                            if (window.isMultiplayer && isRoomHost()) {
+                                // ホストがダメージを確定させて全員に通知
+                                photonClient.raiseEvent(7, {
+                                    targetId: s.id,
+                                    damage: damage,
+                                    newHp: s.hp,
+                                    killerId: b.owner
+                                }, { receivers: Photon.LoadBalancing.Constants.ReceiverGroup.Others });
+                            }
+
                             if (s.id === playerId) shakeCamera(10);
 
                             if (s.hp <= 0 && s.alive) {
@@ -5040,12 +3228,13 @@
                                 if (s.id === playerId) {
                                     s.isGhost = true;
                                     s.hp = 0;
-                                    if (window.isMultiplayer && photonClient) {
+                                    if (window.isMultiplayer && isRoomHost()) {
+                                        // ホストが撃破を確定
                                         photonClient.raiseEvent(
                                             3,
                                             {
                                                 killerId: b.owner,
-                                                deadActorNr: photonClient.myActor().actorNr,
+                                                deadActorNr: s.id === playerId ? photonClient.myActor().actorNr : parseInt(s.id.split('_')[1]),
                                                 x: s.x,
                                                 y: s.y,
                                             },
@@ -5133,9 +3322,21 @@
                         const isMine =
                             s.id === playerId ||
                             (!window.isMultiplayer && s.ai) ||
-                            (window.isMultiplayer && isRoomHost() && s.ai && !s.isRemoteAI);
+                            (window.isMultiplayer && isRoomHost()); // マルチプレイ時はホストが全判定
 
-                        if (isMine) s.hp -= 40 * dt;
+                        if (isMine) {
+                            const damage = 40 * dt;
+                            s.hp -= damage;
+
+                            if (window.isMultiplayer && isRoomHost()) {
+                                photonClient.raiseEvent(7, {
+                                    targetId: s.id,
+                                    damage: Math.round(damage),
+                                    newHp: s.hp,
+                                    killerId: -1 // Asteroid
+                                }, { receivers: Photon.LoadBalancing.Constants.ReceiverGroup.Others });
+                            }
+                        }
                         if (Math.random() < dt * 14) spawnSmoke(s.x, s.y, 4, 1.2);
                         if (s.id === playerId && Math.random() < 0.1) shakeCamera(5);
 
@@ -5146,12 +3347,12 @@
                             if (s.id === playerId) {
                                 s.isGhost = true;
                                 s.hp = 0;
-                                if (window.isMultiplayer && photonClient)
+                                if (window.isMultiplayer && isRoomHost())
                                     photonClient.raiseEvent(
                                         3,
                                         {
                                             killerId: -1,
-                                            deadActorNr: photonClient.myActor().actorNr,
+                                            deadActorNr: s.id === playerId ? photonClient.myActor().actorNr : parseInt(s.id.split('_')[1]),
                                             x: s.x,
                                             y: s.y,
                                         },
@@ -5761,7 +3962,7 @@
             ctx.shadowColor = "#00f0ff";
             ctx.shadowBlur = 8;
             if (!window.isMultiplayer)
-                ctx.fillText(`SCORE ${String(score).padStart(6, "0")}`, 20, 36);
+                ctx.fillText(`SCORE ${String(ScoreManager.get()).padStart(6, "0")}`, 20, 36);
             ctx.fillText(`LIVES ${lives}`, 20, window.isMultiplayer ? 36 : 60);
             if (!window.isMultiplayer) ctx.fillText(`WAVE ${wave}`, 20, 84);
             ctx.shadowBlur = 0;
@@ -5982,8 +4183,8 @@
             if (showMinimap) {
                 const mapW = 140,
                     mapH = 140;
-                const mapX = 12,
-                    mapY = vh - mapH - 12;
+                const mapX = 12 + safeAreaMargin,
+                    mapY = vh - mapH - 12 - safeAreaMargin;
                 ctx.save();
                 ctx.globalAlpha = 0.95;
                 ctx.fillStyle = "rgba(0,10,20,0.7)";
@@ -6261,8 +4462,12 @@
                 enableShake
             );
             const shakeSlider = document.getElementById("shakeIntensitySlider");
+            const safeAreaSlider = document.getElementById("safeAreaSlider");
             if (shakeSlider) {
                 shakeSlider.value = Math.round((featureSettings.shakeIntensity !== undefined ? featureSettings.shakeIntensity : 1.0) * 100);
+            }
+            if (safeAreaSlider) {
+                safeAreaSlider.value = safeAreaMargin;
             }
         }
 
@@ -6676,6 +4881,14 @@
             applyFeatureSettingsToRuntime();
             saveFeatureSettings(featureSettings);
         });
+        const safeAreaSlider = document.getElementById("safeAreaSlider");
+        safeAreaSlider?.addEventListener("input", (e) => {
+            featureSettings.safeAreaMargin = parseInt(e.target.value) || 0;
+            const safeAreaValue = document.getElementById("safeAreaValue");
+            if (safeAreaValue) safeAreaValue.innerText = featureSettings.safeAreaMargin + "px";
+            applyFeatureSettingsToRuntime();
+            saveFeatureSettings(featureSettings);
+        });
 
         /* ========== タブ離脱時の音楽停止 ========== */
         document.addEventListener("visibilitychange", () => {
@@ -7055,7 +5268,7 @@
             powerupsEnabled = settings.powerups !== false;
             idGen = 2;
             wave = 1;
-            score = 0;
+            ScoreManager.reset();
             message = "TEST PLAY";
             showHelp = false;
             gameOverMode = false;
@@ -7126,6 +5339,7 @@
                 ? "(TEST: 観戦モード - P=ポーズ, R=戻る)"
                 : "(TEST: P=ポーズ/メニュー, R=戻る)";
 
+            TimeManager.setStartTime(Date.now());
             running = true;
             updateTouchUIVisibility();
         }
@@ -7163,229 +5377,4 @@
 
         checkAndSetNickname();
         requestAnimationFrame(frame);
-    </script>
-    <!-- ===== Firestore ===== -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
-        import {
-            getFirestore,
-            collection,
-            addDoc,
-            serverTimestamp,
-            query,
-            orderBy,
-            limit,
-            getDocs,
-            where,
-            updateDoc,
-            doc,
-            onSnapshot,
-            deleteDoc,
-        } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
-        import { getAuth } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
-        const firebaseConfig = {
-            apiKey: "AIzaSyBidGHWWtqayly9pMdpAZcHHXqCmor-IKw",
-            authDomain: "shooting-games-1.firebaseapp.com",
-            databaseURL: "https://shooting-games-1-default-rtdb.firebaseio.com",
-            projectId: "shooting-games-1",
-            storageBucket: "shooting-games-1.firebasestorage.app",
-            messagingSenderId: "131768457949",
-            appId: "1:131768457949:web:38c080149bc39126e95934",
-        };
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        const auth = getAuth(app);
-        function normalizeToNumber(v) {
-            if (v === null || v === undefined) return null;
-            if (typeof v === "number" && isFinite(v)) return Math.floor(v);
-            if (typeof v === "string") {
-                const m = v.match(/-?\d+/);
-                if (m) return Math.floor(Number(m));
-            }
-            return null;
-        }
-        async function submitScoreToServer(rawScore, difficulty, playTimeSeconds) {
-            const diff = difficulty || window.currentDifficulty || "normal";
-            const colName =
-                diff === "easy"
-                    ? "rankings_easy"
-                    : diff === "hard"
-                        ? "rankings_hard"
-                        : "rankings";
-            const finalScore = normalizeToNumber(rawScore) || 0;
-            const pTime = normalizeToNumber(playTimeSeconds) || 0;
-            const name = localStorage.getItem("playerNickname_v1") || "UNKNOWN";
-            const colRef = collection(db, colName);
-            const q = query(colRef, where("name", "==", name), limit(1));
-            try {
-                const querySnapshot = await getDocs(q);
-                if (querySnapshot.empty) {
-                    const docRef = await addDoc(colRef, {
-                        name,
-                        score: finalScore,
-                        playTimeSeconds: pTime,
-                        difficulty: diff,
-                        createdAt: serverTimestamp(),
-                        uid: auth.currentUser ? auth.currentUser.uid : null,
-                    });
-                    return { ok: true };
-                } else {
-                    const existingDoc = querySnapshot.docs[0];
-                    const existingScore = existingDoc.data().score || 0;
-                    if (finalScore > existingScore) {
-                        await updateDoc(doc(db, colName, existingDoc.id), {
-                            score: finalScore,
-                            playTimeSeconds: pTime,
-                        });
-                        return { ok: true };
-                    } else {
-                        return { ok: true };
-                    }
-                }
-            } catch (err) {
-                return { ok: false };
-            }
-        }
-        async function fetchTopRanks(difficulty) {
-            const diff = difficulty || "normal";
-            const colName =
-                diff === "easy"
-                    ? "rankings_easy"
-                    : diff === "hard"
-                        ? "rankings_hard"
-                        : "rankings";
-            try {
-                const colRef = collection(db, colName);
-                const q = query(colRef, orderBy("score", "desc"), limit(100));
-                const snap = await getDocs(q);
-                const all = snap.docs.map((d) => {
-                    const data = d.data();
-                    return {
-                        key: d.id,
-                        name: data.name,
-                        score: Number(data.score) || 0,
-                    };
-                });
-                const seen = {};
-                const unique = [];
-                for (const entry of all) {
-                    if (!seen[entry.name] || entry.score > seen[entry.name].score) {
-                        seen[entry.name] = entry;
-                    }
-                }
-                for (const entry of all) {
-                    if (seen[entry.name] === entry) {
-                        unique.push(entry);
-                        delete seen[entry.name];
-                    }
-                }
-                return unique;
-            } catch (err) {
-                return [];
-            }
-        }
-        window.submitScoreToServer = submitScoreToServer;
-        window.fetchTopRanks = fetchTopRanks;
-
-        window.subscribeRooms = function () {
-            const q = query(
-                collection(db, "match_rooms"),
-                where("status", "==", "waiting"),
-            );
-            window.unsubscribeRooms = onSnapshot(q, (snap) => {
-                const roomListDiv = document.getElementById("roomList");
-                roomListDiv.innerHTML = snap.empty
-                    ? "待機中のルームはありません"
-                    : "";
-                snap.forEach((docSnap) => {
-                    const data = docSnap.data();
-                    const div = document.createElement("div");
-                    div.className = "room-item";
-                    div.innerHTML = `<span>HOST: <span style="color:#00f0ff">${data.hostName}</span></span><button class="cyber-btn" style="padding: 4px 12px;">参加</button>`;
-                    div.querySelector("button").addEventListener("click", async () => {
-                        window.currentRoomDocId = docSnap.id;
-                        window.connectToPhoton(data.roomId, false);
-                    });
-                    roomListDiv.appendChild(div);
-                });
-            });
-        };
-
-        window.updateFirestoreRoomStatus = async function (docId) {
-            try {
-                await updateDoc(doc(db, "match_rooms", docId), { status: "playing" });
-            } catch (e) { }
-        };
-        window.deleteFirestoreRoom = async function (docId) {
-            try {
-                await deleteDoc(doc(db, "match_rooms", docId));
-            } catch (e) { }
-        };
-
-        const createRoomModal = document.getElementById("createRoomModal");
-        const btnOpenCreateRoomModal = document.getElementById(
-            "btnOpenCreateRoomModal",
-        );
-        const btnCancelCreateRoom = document.getElementById(
-            "btnCancelCreateRoom",
-        );
-        const btnConfirmCreateRoom = document.getElementById(
-            "btnConfirmCreateRoom",
-        );
-        const roomNameInput = document.getElementById("roomNameInput");
-
-        btnOpenCreateRoomModal?.addEventListener("click", () => {
-            document.getElementById("lobbyModal").style.display = "none";
-            createRoomModal.style.display = "block";
-
-            // reset from previous attempts
-            btnConfirmCreateRoom.disabled = false;
-            btnConfirmCreateRoom.innerText = "作成";
-            roomNameInput.value = "";
-            roomNameInput.focus();
-        });
-
-        btnCancelCreateRoom?.addEventListener("click", () => {
-            createRoomModal.style.display = "none";
-            document.getElementById("lobbyModal").style.display = "block";
-        });
-
-        btnConfirmCreateRoom?.addEventListener("click", async () => {
-            btnConfirmCreateRoom.disabled = true;
-            btnConfirmCreateRoom.innerText = "ルーム作成中...";
-            try {
-                const roomId = "room_" + Math.random().toString(36).substr(2, 9);
-                let hostName = roomNameInput.value.trim();
-                const storedName =
-                    localStorage.getItem("playerNickname_v1") || "UNKNOWN";
-                if (!hostName) hostName = storedName + "のルーム";
-
-                const docRef = await addDoc(collection(db, "match_rooms"), {
-                    roomId,
-                    hostName,
-                    status: "waiting",
-                    createdAt: serverTimestamp(),
-                });
-                window.currentRoomDocId = docRef.id;
-
-                // Cleanup Modal State
-                createRoomModal.style.display = "none";
-
-                window.connectToPhoton(roomId, true);
-            } catch (e) {
-                alert("ネットワークエラー");
-                btnConfirmCreateRoom.disabled = false;
-                btnConfirmCreateRoom.innerText = "作成";
-            }
-        });
-
-        roomNameInput?.addEventListener("keydown", (e) => {
-            if (e.key === "Enter") {
-                e.preventDefault();
-                btnConfirmCreateRoom.click();
-            }
-        });
-    </script>
-</body>
-
-</html>
+    

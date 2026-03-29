@@ -1,0 +1,51 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===== ランキング =====
+    // rankings, rankings_easy, rankings_hard コレクション共通ルール
+    match /rankings/{docId} {
+      allow read: if true;
+      allow create, update: if request.resource.data.score is number
+                            && request.resource.data.score >= 0
+                            && request.resource.data.playTimeSeconds is number
+                            && request.resource.data.playTimeSeconds >= 0
+                            && request.resource.data.score <= request.resource.data.playTimeSeconds * 300
+                            && request.resource.data.name is string
+                            && request.resource.data.name.size() <= 12;
+      allow delete: if false;
+    }
+    match /rankings_easy/{docId} {
+      allow read: if true;
+      allow create, update: if request.resource.data.score is number
+                            && request.resource.data.score >= 0
+                            && request.resource.data.playTimeSeconds is number
+                            && request.resource.data.playTimeSeconds >= 0
+                            && request.resource.data.score <= request.resource.data.playTimeSeconds * 300
+                            && request.resource.data.name is string
+                            && request.resource.data.name.size() <= 12;
+      allow delete: if false;
+    }
+    match /rankings_hard/{docId} {
+      allow read: if true;
+      allow create, update: if request.resource.data.score is number
+                            && request.resource.data.score >= 0
+                            && request.resource.data.playTimeSeconds is number
+                            && request.resource.data.playTimeSeconds >= 0
+                            && request.resource.data.score <= request.resource.data.playTimeSeconds * 300
+                            && request.resource.data.name is string
+                            && request.resource.data.name.size() <= 12;
+      allow delete: if false;
+    }
+
+    // ===== マッチルーム =====
+    match /match_rooms/{docId} {
+      allow read, write: if true;
+    }
+
+    // デフォルト: それ以外のコレクションは拒否
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
