@@ -179,6 +179,9 @@
 
             if (!bgmAudio) {
                 bgmAudio = new Audio();
+                // モバイルなどでの初回タッチによる再生ブロック解除用の無音WAV
+                bgmAudio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
+                bgmAudio.loop = true;
                 try {
                     bgmSource = audioCtx.createMediaElementSource(bgmAudio);
                     bgmSource.connect(bgmGainNode);
@@ -212,6 +215,33 @@
                 return a;
             }
 
+            let fadeTimeout = null;
+            function fadeMusicOut(callback) {
+                if (fadeTimeout) {
+                    clearTimeout(fadeTimeout);
+                    fadeTimeout = null;
+                }
+                if (!bgmGainNode || !audioCtx || !bgmAudio || bgmAudio.paused) {
+                    if (bgmGainNode && audioCtx) {
+                        bgmGainNode.gain.cancelScheduledValues(audioCtx.currentTime);
+                        bgmGainNode.gain.setValueAtTime(audioSettings.bgm, audioCtx.currentTime);
+                    }
+                    if (callback) callback();
+                    return;
+                }
+                const now = audioCtx.currentTime;
+                const vol = bgmGainNode.gain.value;
+                bgmGainNode.gain.cancelScheduledValues(now);
+                bgmGainNode.gain.setValueAtTime(vol, now);
+                bgmGainNode.gain.linearRampToValueAtTime(0, now + 0.5);
+                
+                fadeTimeout = setTimeout(() => {
+                    bgmAudio.pause();
+                    bgmGainNode.gain.setValueAtTime(audioSettings.bgm, audioCtx.currentTime);
+                    if (callback) callback();
+                }, 500);
+            }
+
             window.playTitleBGM = function() {
                 window._currentBgmReq = "title";
                 if (!audioCtx || audioCtx.state === "suspended") return;
@@ -222,11 +252,13 @@
                 if (currentBgmMode === "title") return;
                 currentBgmMode = "title";
 
-                bgmAudio.pause();
-                bgmAudio.src = bgmAudioList.title[0];
-                bgmAudio.loop = true;
-                bgmAudio.onended = null;
-                bgmAudio.play().catch(e=>{});
+                fadeMusicOut(() => {
+                    if (currentBgmMode !== "title") return;
+                    bgmAudio.src = bgmAudioList.title[0];
+                    bgmAudio.loop = true;
+                    bgmAudio.onended = null;
+                    bgmAudio.play().catch(e=>{});
+                });
             };
 
             window.playBattleBGM = function() {
@@ -239,30 +271,32 @@
                 if (currentBgmMode === "battle") return;
                 currentBgmMode = "battle";
 
-                bgmAudio.pause();
-                battleBgmQueue = shuffleArray(bgmAudioList.battle);
-                let idx = 0;
-
-                function playNext() {
+                fadeMusicOut(() => {
                     if (currentBgmMode !== "battle") return;
-                    if (idx >= battleBgmQueue.length) {
-                        battleBgmQueue = shuffleArray(bgmAudioList.battle);
-                        idx = 0;
+                    battleBgmQueue = shuffleArray(bgmAudioList.battle);
+                    let idx = 0;
+
+                    function playNext() {
+                        if (currentBgmMode !== "battle") return;
+                        if (idx >= battleBgmQueue.length) {
+                            battleBgmQueue = shuffleArray(bgmAudioList.battle);
+                            idx = 0;
+                        }
+                        bgmAudio.src = battleBgmQueue[idx++];
+                        // 終わったら次を再生（1曲ごとに）
+                        bgmAudio.loop = false;
+                        bgmAudio.play().catch(e=>{});
                     }
-                    bgmAudio.src = battleBgmQueue[idx++];
-                    // 終わったら次を再生（1曲ごとに）
-                    bgmAudio.loop = false;
-                    bgmAudio.play().catch(e=>{});
-                }
-                
-                bgmAudio.onended = playNext;
-                playNext();
+                    
+                    bgmAudio.onended = playNext;
+                    playNext();
+                });
             };
 
             window.stopBGM = function() {
                 window._currentBgmReq = null;
                 currentBgmMode = null;
-                if (bgmAudio) bgmAudio.pause();
+                fadeMusicOut();
             };
 
             // AudioContextが既に動いていたら初期状態でタイトルBGMを鳴らす
@@ -616,7 +650,8 @@
             featureSettings.shakeIntensity !== undefined
                 ? featureSettings.shakeIntensity
                 : 1.0;
-        let safeAreaMargin = featureSettings.safeAreaMargin || 0;
+        let safeAreaMarginX = featureSettings.safeAreaMarginX !== undefined ? featureSettings.safeAreaMarginX : (featureSettings.safeAreaMargin || 0);
+        let safeAreaMarginY = featureSettings.safeAreaMarginY !== undefined ? featureSettings.safeAreaMarginY : (featureSettings.safeAreaMargin || 0);
         function applyFeatureSettingsToRuntime() {
             showStars = !!featureSettings.stars;
             showMinimap = !!featureSettings.minimap;
@@ -633,10 +668,14 @@
                 featureSettings.shakeIntensity !== undefined
                     ? featureSettings.shakeIntensity
                     : 1.0;
-            safeAreaMargin = featureSettings.safeAreaMargin || 0;
-            document.documentElement.style.setProperty('--safe-area-extra', safeAreaMargin + 'px');
-            const safeAreaValue = document.getElementById("safeAreaValue");
-            if (safeAreaValue) safeAreaValue.innerText = safeAreaMargin + "px";
+            safeAreaMarginX = featureSettings.safeAreaMarginX !== undefined ? featureSettings.safeAreaMarginX : (featureSettings.safeAreaMargin || 0);
+            safeAreaMarginY = featureSettings.safeAreaMarginY !== undefined ? featureSettings.safeAreaMarginY : (featureSettings.safeAreaMargin || 0);
+            document.documentElement.style.setProperty('--safe-area-extra-x', safeAreaMarginX + 'px');
+            document.documentElement.style.setProperty('--safe-area-extra-y', safeAreaMarginY + 'px');
+            const safeAreaXValue = document.getElementById("safeAreaXValue");
+            if (safeAreaXValue) safeAreaXValue.innerText = safeAreaMarginX + "px";
+            const safeAreaYValue = document.getElementById("safeAreaYValue");
+            if (safeAreaYValue) safeAreaYValue.innerText = safeAreaMarginY + "px";
         }
         applyFeatureSettingsToRuntime();
 
@@ -811,7 +850,7 @@
         let mouse = { x: 0, y: 0, down: false };
         let bindingAction = null;
 
-        const GAME_VERSION = "1.0.30";
+        const GAME_VERSION = "1.0.35";
         let running = false,
             showHelp = false;
         let isPaused = false;
@@ -4640,12 +4679,16 @@
                 enableShake
             );
             const shakeSlider = document.getElementById("shakeIntensitySlider");
-            const safeAreaSlider = document.getElementById("safeAreaSlider");
+            const safeAreaXSlider = document.getElementById("safeAreaXSlider");
+            const safeAreaYSlider = document.getElementById("safeAreaYSlider");
             if (shakeSlider) {
                 shakeSlider.value = Math.round((featureSettings.shakeIntensity !== undefined ? featureSettings.shakeIntensity : 1.0) * 100);
             }
-            if (safeAreaSlider) {
-                safeAreaSlider.value = safeAreaMargin;
+            if (safeAreaXSlider) {
+                safeAreaXSlider.value = safeAreaMarginX;
+            }
+            if (safeAreaYSlider) {
+                safeAreaYSlider.value = safeAreaMarginY;
             }
         }
 
@@ -5060,11 +5103,15 @@
             applyFeatureSettingsToRuntime();
             saveFeatureSettings(featureSettings);
         });
-        const safeAreaSlider = document.getElementById("safeAreaSlider");
-        safeAreaSlider?.addEventListener("input", (e) => {
-            featureSettings.safeAreaMargin = parseInt(e.target.value) || 0;
-            const safeAreaValue = document.getElementById("safeAreaValue");
-            if (safeAreaValue) safeAreaValue.innerText = featureSettings.safeAreaMargin + "px";
+        const safeAreaXSlider = document.getElementById("safeAreaXSlider");
+        safeAreaXSlider?.addEventListener("input", (e) => {
+            featureSettings.safeAreaMarginX = parseInt(e.target.value) || 0;
+            applyFeatureSettingsToRuntime();
+            saveFeatureSettings(featureSettings);
+        });
+        const safeAreaYSlider = document.getElementById("safeAreaYSlider");
+        safeAreaYSlider?.addEventListener("input", (e) => {
+            featureSettings.safeAreaMarginY = parseInt(e.target.value) || 0;
             applyFeatureSettingsToRuntime();
             saveFeatureSettings(featureSettings);
         });
@@ -5597,12 +5644,12 @@
                 });
                 // セーフエリアガイド表示
                 const guide = document.getElementById('leSafeAreaGuide');
-                if (guide && safeAreaMargin > 0) {
+                if (guide && (safeAreaMarginX > 0 || safeAreaMarginY > 0)) {
                     guide.style.display = 'block';
-                    guide.style.left = safeAreaMargin + 'px';
-                    guide.style.top = safeAreaMargin + 'px';
-                    guide.style.width = (window.innerWidth - safeAreaMargin * 2) + 'px';
-                    guide.style.height = (window.innerHeight - safeAreaMargin * 2) + 'px';
+                    guide.style.left = safeAreaMarginX + 'px';
+                    guide.style.top = safeAreaMarginY + 'px';
+                    guide.style.width = (window.innerWidth - safeAreaMarginX * 2) + 'px';
+                    guide.style.height = (window.innerHeight - safeAreaMarginY * 2) + 'px';
                 }
                 initCanvas();
             });

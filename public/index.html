@@ -719,8 +719,8 @@
 
         #joystickArea {
             position: absolute;
-            left: var(--safe-area-extra, 0px);
-            bottom: var(--safe-area-extra, 0px);
+            left: var(--safe-area-extra-x, 0px);
+            bottom: var(--safe-area-extra-y, 0px);
             width: 50%;
             height: 50%;
             pointer-events: auto;
@@ -753,8 +753,8 @@
 
         #touchBtns {
             position: absolute;
-            right: calc(20px + var(--safe-area-extra, 0px));
-            bottom: calc(20px + var(--safe-area-extra, 0px));
+            right: calc(20px + var(--safe-area-extra-x, 0px));
+            bottom: calc(20px + var(--safe-area-extra-y, 0px));
             width: 40%;
             height: 50%;
             pointer-events: none;
@@ -816,7 +816,7 @@
         }
 
         #btnTouchPause {
-            top: calc(20px + var(--safe-area-extra, 0px));
+            top: calc(20px + var(--safe-area-extra-y, 0px));
             left: 50%;
             transform: translateX(-50%);
             width: 50px;
