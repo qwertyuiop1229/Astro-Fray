@@ -233,13 +233,15 @@
                 const vol = bgmGainNode.gain.value;
                 bgmGainNode.gain.cancelScheduledValues(now);
                 bgmGainNode.gain.setValueAtTime(vol, now);
-                bgmGainNode.gain.linearRampToValueAtTime(0, now + 0.5);
+                bgmGainNode.gain.linearRampToValueAtTime(0, now + 1.2);
                 
                 fadeTimeout = setTimeout(() => {
+                    fadeTimeout = null;
                     bgmAudio.pause();
-                    bgmGainNode.gain.setValueAtTime(audioSettings.bgm, audioCtx.currentTime);
+                    bgmGainNode.gain.cancelScheduledValues(audioCtx.currentTime);
+                    bgmGainNode.gain.setValueAtTime(0, audioCtx.currentTime); // 完全にミュート状態を維持
                     if (callback) callback();
-                }, 500);
+                }, 1250);
             }
 
             window.playTitleBGM = function() {
@@ -257,6 +259,8 @@
                     bgmAudio.src = bgmAudioList.title[0];
                     bgmAudio.loop = true;
                     bgmAudio.onended = null;
+                    bgmGainNode.gain.cancelScheduledValues(audioCtx.currentTime);
+                    bgmGainNode.gain.setValueAtTime(audioSettings.bgm, audioCtx.currentTime);
                     bgmAudio.play().catch(e=>{});
                 });
             };
@@ -285,6 +289,8 @@
                         bgmAudio.src = battleBgmQueue[idx++];
                         // 終わったら次を再生（1曲ごとに）
                         bgmAudio.loop = false;
+                        bgmGainNode.gain.cancelScheduledValues(audioCtx.currentTime);
+                        bgmGainNode.gain.setValueAtTime(audioSettings.bgm, audioCtx.currentTime);
                         bgmAudio.play().catch(e=>{});
                     }
                     
@@ -294,7 +300,6 @@
             };
 
             window.stopBGM = function() {
-                window._currentBgmReq = null;
                 currentBgmMode = null;
                 fadeMusicOut();
             };
@@ -509,6 +514,34 @@
                 return;
             }
             audioHint.style.display = "block";
+        }
+
+        /* ========== 画面トランジション ========== */
+        const _fadeOverlay = document.getElementById("screenFadeOverlay");
+        function screenFadeOut(duration, color, callback) {
+            if (typeof color === "function") {
+                callback = color;
+                color = "#050510"; // デフォルトは暗転
+            }
+            if (!_fadeOverlay) { if (callback) callback(); return; }
+            _fadeOverlay.style.pointerEvents = 'all'; // 演出中はクリック・タップをすべてブロックする
+            _fadeOverlay.style.transition = 'none';
+            _fadeOverlay.style.opacity = '0';
+            _fadeOverlay.style.backgroundColor = color || "#050510";
+            _fadeOverlay.offsetHeight; // reflow
+            _fadeOverlay.style.transition = 'opacity ' + duration + 'ms ease-in';
+            _fadeOverlay.style.opacity = '1';
+            setTimeout(() => { if (callback) callback(); }, duration);
+        }
+        function screenFadeIn(duration, delay) {
+            if (!_fadeOverlay) return;
+            setTimeout(() => {
+                _fadeOverlay.style.transition = 'opacity ' + duration + 'ms ease-out';
+                _fadeOverlay.style.opacity = '0';
+                setTimeout(() => {
+                    _fadeOverlay.style.pointerEvents = 'none'; // フェードイン完了後にブロック解除
+                }, duration);
+            }, delay || 0);
         }
 
         /* ========== 基本ユーティリティ ========== */
@@ -850,7 +883,7 @@
         let mouse = { x: 0, y: 0, down: false };
         let bindingAction = null;
 
-        const GAME_VERSION = "1.0.35";
+        const GAME_VERSION = "1.0.48";
         let running = false,
             showHelp = false;
         let isPaused = false;
@@ -1255,39 +1288,44 @@
         }
 
         window.leaveMultiplayerRoom = function (showAlert = false, msg = "") {
-            if (typeof window.playTitleBGM === "function") window.playTitleBGM();
             if (hasDisconnectedAlertShown) return;
             isLeavingRoom = true;
             if (showAlert) {
                 hasDisconnectedAlertShown = true;
                 alert(msg);
             }
-            running = false;
-            isPaused = false;
-            matchEnded = false;
 
-            if (photonClient && photonClient.isJoinedToRoom()) {
-                if (
-                    window.currentRoomDocId &&
-                    photonClient.myRoom().masterClientId ===
-                    photonClient.myActor().actorNr
-                ) {
-                    if (window.deleteFirestoreRoom)
-                        window.deleteFirestoreRoom(window.currentRoomDocId);
+            // 画面フェードアウト → BGMフェードアウトを同時に行い、完了後にモードセレクトへ
+            if (typeof window.playTitleBGM === "function") window.playTitleBGM();
+            screenFadeOut(1200, "#050510", () => {
+                running = false;
+                isPaused = false;
+                matchEnded = false;
+
+                if (photonClient && photonClient.isJoinedToRoom()) {
+                    if (
+                        window.currentRoomDocId &&
+                        photonClient.myRoom().masterClientId ===
+                        photonClient.myActor().actorNr
+                    ) {
+                        if (window.deleteFirestoreRoom)
+                            window.deleteFirestoreRoom(window.currentRoomDocId);
+                    }
+                    photonClient.leaveRoom();
+                    photonClient.disconnect();
                 }
-                photonClient.leaveRoom();
-                photonClient.disconnect();
-            }
-            document
-                .querySelectorAll(".game-modal")
-                .forEach((m) => (m.style.display = "none"));
-            document.getElementById("pauseSettingsMenu").style.display = "none";
-            document.getElementById("modeSelectModal").style.display = "block";
+                document
+                    .querySelectorAll(".game-modal")
+                    .forEach((m) => (m.style.display = "none"));
+                document.getElementById("pauseSettingsMenu").style.display = "none";
+                document.getElementById("modeSelectModal").style.display = "block";
 
-            resetGameBackground();
+                resetGameBackground();
 
-            ctx.fillStyle = "#050510";
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = "#050510";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                screenFadeIn(800, 100);
+            });
             if (showAlert)
                 setTimeout(() => {
                     hasDisconnectedAlertShown = false;
@@ -1950,78 +1988,88 @@
 
         function startCountdownAndPlay(settings) {
             if (typeof window.stopBGM === "function") window.stopBGM();
-            document.getElementById("roomWaitModal").style.display = "none";
-            const cdUI = document.getElementById("countdownUI");
-            cdUI.style.display = "block";
+            screenFadeOut(1200, "#ffffff", () => {
+                document.getElementById("roomWaitModal").style.display = "none";
+                screenFadeIn(600, 0);
 
-            let count = 3;
-            cdUI.innerText = count;
-            cdUI.style.color = "#00f0ff";
-            cdUI.style.fontSize = "100px";
-            try {
-                playLaserSound();
-            } catch (e) { }
-
-            const iv = setInterval(() => {
-                count--;
-                if (count > 0) {
+                setTimeout(() => {
+                    const cdUI = document.getElementById("countdownUI");
+                    cdUI.style.display = "block";
+                    let count = 3;
                     cdUI.innerText = count;
+                    cdUI.style.color = "#00f0ff";
+                    cdUI.style.fontSize = "100px";
                     try {
                         playLaserSound();
                     } catch (e) { }
-                } else {
-                    clearInterval(iv);
-                    cdUI.innerText = "START!";
-                    try {
-                        playExplosionSound("small");
-                    } catch (e) { }
-                    setTimeout(() => {
-                        cdUI.style.display = "none";
-                    }, 1000);
 
-                    window.isMultiplayer = true;
-                    window.currentRoomSettings = settings;
-                    initGame();
-                }
-            }, 1000);
+                    const iv = setInterval(() => {
+                        count--;
+                        if (count > 0) {
+                            cdUI.innerText = count;
+                            try {
+                                playLaserSound();
+                            } catch (e) { }
+                        } else {
+                            clearInterval(iv);
+                            cdUI.innerText = "START!";
+                            try {
+                                playExplosionSound("small");
+                            } catch (e) { }
+                            setTimeout(() => {
+                                cdUI.style.display = "none";
+                            }, 1000);
+
+                            window.isMultiplayer = true;
+                            window.currentRoomSettings = settings;
+                            initGame();
+                        }
+                    }, 1000);
+                }, 1200);
+            });
         }
 
         function startSinglePlayerCountdown() {
             if (typeof window.stopBGM === "function") window.stopBGM();
-            document.getElementById("modeSelectModal").style.display = "none";
-            const cdUI = document.getElementById("countdownUI");
-            cdUI.style.display = "block";
+            screenFadeOut(1200, "#ffffff", () => {
+                document.getElementById("modeSelectModal").style.display = "none";
+                screenFadeIn(600, 0);
 
-            let count = 3;
-            cdUI.innerText = count;
-            cdUI.style.color = "#00f0ff";
-            cdUI.style.fontSize = "100px";
-            try {
-                playLaserSound();
-            } catch (e) { }
-
-            const iv = setInterval(() => {
-                count--;
-                if (count > 0) {
+                setTimeout(() => {
+                    const cdUI = document.getElementById("countdownUI");
+                    cdUI.style.display = "block";
+                    let count = 3;
                     cdUI.innerText = count;
+                    cdUI.style.color = "#00f0ff";
+                    cdUI.style.fontSize = "100px";
                     try {
                         playLaserSound();
                     } catch (e) { }
-                } else {
-                    clearInterval(iv);
-                    cdUI.innerText = "START!";
-                    try {
-                        playExplosionSound("small");
-                    } catch (e) { }
-                    setTimeout(() => {
-                        cdUI.style.display = "none";
-                    }, 1000);
 
-                    window.isMultiplayer = false;
-                    window._testPlayMode = false;
-                    initGame();
-                }
-            }, 1000);
+                    const iv = setInterval(() => {
+                        count--;
+                        if (count > 0) {
+                            cdUI.innerText = count;
+                            try {
+                                playLaserSound();
+                            } catch (e) { }
+                        } else {
+                            clearInterval(iv);
+                            cdUI.innerText = "START!";
+                            try {
+                                playExplosionSound("small");
+                            } catch (e) { }
+                            setTimeout(() => {
+                                cdUI.style.display = "none";
+                            }, 1000);
+
+                            window.isMultiplayer = false;
+                            window._testPlayMode = false;
+                            initGame();
+                        }
+                    }, 1000);
+                }, 1200);
+            });
         }
 
         /* ========== 初期化 ========== */
@@ -4145,7 +4193,7 @@
         function drawUI(ctx, vLeft, vRight, vTop, vBottom) {
             const vw = canvas.width / dpr,
                 vh = canvas.height / dpr;
-            const scoreLayout = getCanvasLayout('hud_score', 20 + safeAreaMargin, 36 + safeAreaMargin);
+            const scoreLayout = getCanvasLayout('hud_score', 20 + safeAreaMarginX, 36 + safeAreaMarginY);
             ctx.save();
             ctx.translate(scoreLayout.x, scoreLayout.y);
             ctx.scale(scoreLayout.s, scoreLayout.s);
@@ -4247,8 +4295,8 @@
                         (s.lives !== undefined && s.lives > 0) ||
                         (s.id === playerId && lives > 0)),
             ).length;
-            const baseEx = Math.max(16, vw - 180 - safeAreaMargin);
-            const teamLayout = getCanvasLayout('hud_teams', baseEx, 36 + safeAreaMargin);
+            const baseEx = Math.max(16, vw - 180 - safeAreaMarginX);
+            const teamLayout = getCanvasLayout('hud_teams', baseEx, 36 + safeAreaMarginY);
             ctx.save();
             ctx.translate(teamLayout.x, teamLayout.y);
             ctx.scale(teamLayout.s, teamLayout.s);
@@ -4379,8 +4427,8 @@
             const fpsText = `FPS ${String(fpsDisplay).padStart(2, " ")}`;
             const metrics = ctx.measureText(fpsText);
             
-            const fpX = vw - metrics.width - 16 - safeAreaMargin;
-            const fpY = vh - 28 - safeAreaMargin;
+            const fpX = vw - metrics.width - 16 - safeAreaMarginX;
+            const fpY = vh - 28 - safeAreaMarginY;
             const fpsLayout = getCanvasLayout('hud_fps', fpX, fpY);
             
             ctx.translate(fpsLayout.x, fpsLayout.y);
@@ -4395,8 +4443,8 @@
             if (showMinimap) {
                 const mapW = 140,
                     mapH = 140;
-                const mX = 12 + safeAreaMargin;
-                const mY = vh - mapH - 12 - safeAreaMargin;
+                const mX = 12 + safeAreaMarginX;
+                const mY = vh - mapH - 12 - safeAreaMarginY;
                 const mapLayout = getCanvasLayout('hud_minimap', mX, mY);
                 
                 ctx.save();
@@ -4779,22 +4827,26 @@
                     await handleGameOverSubmit();
                 }
 
+                // 画面フェードアウト → モードセレクトへ
                 if (typeof window.playTitleBGM === "function") window.playTitleBGM();
-                running = false;
-                gameOverMode = false;
-                isPaused = false;
-                matchEnded = false;
-                window._testPlayMode = false;
-                document
-                    .querySelectorAll(".game-modal")
-                    .forEach((m) => (m.style.display = "none"));
-                document.getElementById("pauseSettingsMenu").style.display = "none";
-                document.getElementById("modeSelectModal").style.display = "block";
+                screenFadeOut(1200, "#050510", () => {
+                    running = false;
+                    gameOverMode = false;
+                    isPaused = false;
+                    matchEnded = false;
+                    window._testPlayMode = false;
+                    document
+                        .querySelectorAll(".game-modal")
+                        .forEach((m) => (m.style.display = "none"));
+                    document.getElementById("pauseSettingsMenu").style.display = "none";
+                    document.getElementById("modeSelectModal").style.display = "block";
 
-                resetGameBackground();
+                    resetGameBackground();
 
-                ctx.fillStyle = "#050510";
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.fillStyle = "#050510";
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    screenFadeIn(800, 100);
+                });
             });
 
         function renderKeymapList() {
