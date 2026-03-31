@@ -883,7 +883,7 @@ let keys = {};
 let mouse = { x: 0, y: 0, down: false };
 let bindingAction = null;
 
-const GAME_VERSION = "1.0.60";
+const GAME_VERSION = "1.0.65";
 let running = false,
     showHelp = false;
 let isPaused = false;
@@ -1295,6 +1295,21 @@ window.leaveMultiplayerRoom = function (showAlert = false, msg = "") {
         alert(msg);
     }
 
+    // フェードアウトの待機(1.2秒)を消し、即座にPhoton切断とFirestore削除を行う
+    if (photonClient && photonClient.isJoinedToRoom()) {
+        if (
+            window.currentRoomDocId &&
+            photonClient.myRoom().masterClientId ===
+            photonClient.myActor().actorNr
+        ) {
+            if (window.deleteFirestoreRoom)
+                window.deleteFirestoreRoom(window.currentRoomDocId);
+        }
+        photonClient.leaveRoom();
+        photonClient.disconnect();
+    }
+    window.currentRoomDocId = null; // IDをリセットして重複処理を防ぐ
+
     // 画面フェードアウト → BGMフェードアウトを同時に行い、完了後にモードセレクトへ
     if (typeof window.playTitleBGM === "function") window.playTitleBGM();
     screenFadeOut(1200, "#050510", () => {
@@ -1302,18 +1317,6 @@ window.leaveMultiplayerRoom = function (showAlert = false, msg = "") {
         isPaused = false;
         matchEnded = false;
 
-        if (photonClient && photonClient.isJoinedToRoom()) {
-            if (
-                window.currentRoomDocId &&
-                photonClient.myRoom().masterClientId ===
-                photonClient.myActor().actorNr
-            ) {
-                if (window.deleteFirestoreRoom)
-                    window.deleteFirestoreRoom(window.currentRoomDocId);
-            }
-            photonClient.leaveRoom();
-            photonClient.disconnect();
-        }
         document
             .querySelectorAll(".game-modal")
             .forEach((m) => (m.style.display = "none"));
@@ -1758,6 +1761,31 @@ window.connectToPhoton = function (roomId, isHost) {
         }
     };
 
+    photonClient.onJoinRoomFailed = function (errorCode, errorMsg) {
+        console.warn("Join Room Failed:", errorCode, errorMsg);
+        updatePhotonStatus("入室に失敗しました");
+        alert(
+            "ルームの入室に失敗しました。\n既に解散されたか、存在しない可能性があります。",
+        );
+
+        // 入室に失敗した＝無効なルームがFirestoreに残っているため、掃除する
+        if (window.currentRoomDocId && window.deleteFirestoreRoom) {
+            window.deleteFirestoreRoom(window.currentRoomDocId);
+        }
+        window.leaveMultiplayerRoom(false);
+    };
+
+    photonClient.onCreateRoomFailed = function (errorCode, errorMsg) {
+        console.warn("Create Room Failed:", errorCode, errorMsg);
+        updatePhotonStatus("ルーム作成に失敗しました");
+        alert("ルームの作成に失敗しました。");
+
+        if (window.currentRoomDocId && window.deleteFirestoreRoom) {
+            window.deleteFirestoreRoom(window.currentRoomDocId);
+        }
+        window.leaveMultiplayerRoom(false);
+    };
+
     photonClient.onActorJoin = function (actor) {
         updateRoomPlayerList();
         drawSpawnMap();
@@ -1776,6 +1804,11 @@ window.connectToPhoton = function (roomId, isHost) {
 
         // ホスト切断時
         if (!isLeavingRoom && (actor.isMasterClient || actor.actorNr === 1)) {
+            // 残されたプレイヤーがFirestoreのルームを確実に消去する
+            if (window.currentRoomDocId && window.deleteFirestoreRoom) {
+                window.deleteFirestoreRoom(window.currentRoomDocId);
+            }
+
             if (matchEnded) {
                 alert("ホストの接続が切断されました。");
             } else {
