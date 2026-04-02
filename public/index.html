@@ -478,6 +478,29 @@
             margin: 4px 6px 4px 0;
             font-size: 13px;
             cursor: pointer;
+        }
+        
+        /* ワープトランジション */
+        #warpTransitionOverlay {
+            position: fixed;
+            inset: 0;
+            z-index: 100000;
+            pointer-events: none;
+            display: none;
+            background: #020510;
+            overflow: hidden;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        #warpStarCanvas {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .team-btn.inactive {
             background: rgba(0, 0, 0, 0.5);
             color: #aaa;
             border: 1px solid rgba(255, 255, 255, 0.1);
@@ -1125,6 +1148,228 @@
         .settings-section-header:first-child {
             margin-top: 0;
         }
+
+        /* ===== Start Screen ===== */
+        #startScreen {
+            position: fixed;
+            inset: 0;
+            z-index: 100000;
+            background: #020510;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            overflow: hidden;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        }
+
+        #startScreen.start-hidden {
+            pointer-events: none;
+            animation: startScreenFadeOut 0.8s ease-in forwards;
+        }
+
+        @keyframes startScreenFadeOut {
+            0% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+
+        /* 星背景 */
+        #startStarCanvas {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        /* スキャンライン */
+        .start-scanlines {
+            position: absolute;
+            inset: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0, 240, 255, 0.015) 2px,
+                rgba(0, 240, 255, 0.015) 4px
+            );
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        /* ビネット効果 */
+        .start-vignette {
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(
+                ellipse at center,
+                transparent 40%,
+                rgba(2, 5, 16, 0.6) 75%,
+                rgba(2, 5, 16, 0.95) 100%
+            );
+            pointer-events: none;
+            z-index: 2;
+        }
+
+        .start-content {
+            position: relative;
+            z-index: 3;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0;
+        }
+
+        /* 装飾ライン上 */
+        .start-deco-line {
+            width: 280px;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(0, 240, 255, 0.6), transparent);
+            margin-bottom: 20px;
+            animation: startDecoFadeIn 1.5s ease-out 0.3s both;
+        }
+
+        .start-deco-line.bottom {
+            margin-bottom: 0;
+            margin-top: 20px;
+            animation-delay: 0.5s;
+        }
+
+        @keyframes startDecoFadeIn {
+            from { opacity: 0; width: 0; }
+            to { opacity: 1; width: 280px; }
+        }
+
+        /* サブタイトル */
+        .start-subtitle {
+            font-size: 11px;
+            letter-spacing: 6px;
+            color: rgba(0, 240, 255, 0.5);
+            text-transform: uppercase;
+            margin-bottom: 8px;
+            animation: startTextFadeIn 1s ease-out 0.2s both;
+        }
+
+        @keyframes startTextFadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* タイトル */
+        .start-title {
+            font-size: 52px;
+            font-weight: 900;
+            letter-spacing: 12px;
+            color: #fff;
+            text-shadow:
+                0 0 20px rgba(0, 240, 255, 0.8),
+                0 0 40px rgba(0, 240, 255, 0.4),
+                0 0 80px rgba(0, 240, 255, 0.2),
+                0 2px 0 rgba(0, 180, 255, 0.3);
+            animation: startTitleIn 1.2s ease-out 0.1s both;
+            position: relative;
+        }
+
+        .start-title::after {
+            content: '';
+            position: absolute;
+            bottom: -4px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 60%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #00f0ff, transparent);
+            box-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+        }
+
+        @keyframes startTitleIn {
+            0% { opacity: 0; transform: scale(0.8); letter-spacing: 30px; }
+            60% { opacity: 1; }
+            100% { opacity: 1; transform: scale(1); letter-spacing: 12px; }
+        }
+
+        /* アクションテキスト */
+        .start-action {
+            font-size: 15px;
+            letter-spacing: 4px;
+            color: rgba(0, 240, 255, 0.9);
+            text-transform: uppercase;
+            margin-top: 40px;
+            animation: startActionPulse 2.5s ease-in-out infinite, startTextFadeIn 1s ease-out 1s both;
+        }
+
+        @keyframes startActionPulse {
+            0%, 100% {
+                opacity: 0.5;
+                text-shadow: 0 0 5px rgba(0, 240, 255, 0.3);
+            }
+            50% {
+                opacity: 1;
+                text-shadow:
+                    0 0 10px rgba(0, 240, 255, 0.6),
+                    0 0 20px rgba(0, 240, 255, 0.3);
+            }
+        }
+
+        /* バージョン表示 */
+        .start-version {
+            position: absolute;
+            bottom: 24px;
+            right: 28px;
+            font-size: 10px;
+            color: rgba(0, 240, 255, 0.25);
+            letter-spacing: 1px;
+            z-index: 3;
+        }
+
+        /* コーナー装飾 */
+        .start-corner {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            z-index: 3;
+            opacity: 0;
+            animation: startCornerIn 0.8s ease-out 0.8s forwards;
+        }
+        .start-corner.tl { top: 20px; left: 20px; border-top: 2px solid rgba(0, 240, 255, 0.4); border-left: 2px solid rgba(0, 240, 255, 0.4); }
+        .start-corner.tr { top: 20px; right: 20px; border-top: 2px solid rgba(0, 240, 255, 0.4); border-right: 2px solid rgba(0, 240, 255, 0.4); }
+        .start-corner.bl { bottom: 20px; left: 20px; border-bottom: 2px solid rgba(0, 240, 255, 0.4); border-left: 2px solid rgba(0, 240, 255, 0.4); }
+        .start-corner.br { bottom: 20px; right: 20px; border-bottom: 2px solid rgba(0, 240, 255, 0.4); border-right: 2px solid rgba(0, 240, 255, 0.4); }
+
+        @keyframes startCornerIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        /* レスポンシブ */
+        @media (max-width: 600px) {
+            .start-title {
+                font-size: 32px;
+                letter-spacing: 8px;
+            }
+            @keyframes startTitleIn {
+                0% { opacity: 0; transform: scale(0.8); letter-spacing: 20px; }
+                60% { opacity: 1; }
+                100% { opacity: 1; transform: scale(1); letter-spacing: 8px; }
+            }
+            .start-action {
+                font-size: 13px;
+                letter-spacing: 3px;
+            }
+            .start-subtitle {
+                font-size: 9px;
+                letter-spacing: 4px;
+            }
+            .start-deco-line {
+                width: 180px;
+            }
+            @keyframes startDecoFadeIn {
+                from { opacity: 0; width: 0; }
+                to { opacity: 1; width: 180px; }
+            }
+        }
     </style>
 </head>
 <!-- Google tag (gtag.js) -->
@@ -1140,6 +1385,29 @@
 </script>
 
 <body>
+    <!-- Start Screen -->
+    <div id="startScreen">
+        <canvas id="startStarCanvas"></canvas>
+        <div class="start-scanlines"></div>
+        <div class="start-vignette"></div>
+        <div class="start-corner tl"></div>
+        <div class="start-corner tr"></div>
+        <div class="start-corner bl"></div>
+        <div class="start-corner br"></div>
+        <div class="start-content">
+            <div class="start-subtitle">SPACE DOGFIGHT</div>
+            <div class="start-deco-line"></div>
+            <div class="start-title">ASTRO FRAY</div>
+            <div class="start-deco-line bottom"></div>
+            <div class="start-action" id="startActionText">CLICK TO START</div>
+        </div>
+        <div class="start-version" id="startVersionText"></div>
+    </div>
+
+    <div id="warpTransitionOverlay">
+        <canvas id="warpStarCanvas"></canvas>
+    </div>
+
     <div id="screenFadeOverlay" style="position:fixed;inset:0;background:#050510;z-index:99999;pointer-events:none;opacity:0;transition:none;"></div>
     <div id="game-wrap">
         <canvas id="game"></canvas>
@@ -1306,6 +1574,12 @@
                                 <div class="knob"></div>
                             </div>
                         </div>
+                        <div class="setting-row">
+                            <span>ワープ時の重低音</span>
+                            <div id="toggleWarpBass" class="toggle" role="switch" tabindex="0" aria-checked="false">
+                                <div class="knob"></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -1313,13 +1587,13 @@
                 <div class="settings-tab-content" data-tab-content="controls">
                     <div class="settings-container">
                         <div class="setting-row">
-                            <div>操作モード (ON:マウス / OFF:キーボード)</div>
+                            <div>エイム同期方式 (ON:マウス追従 / OFF:キー固有)</div>
                             <div id="toggleControlMode" class="toggle" role="switch" tabindex="0">
                                 <div class="knob"></div>
                             </div>
                         </div>
                         <div class="setting-row">
-                            <div>スマホ用操作UI</div>
+                            <div>仮想コントロールパッド表示</div>
                             <div id="toggleTouchUI" class="toggle" role="switch" tabindex="0">
                                 <div class="knob"></div>
                             </div>
@@ -1597,7 +1871,7 @@
             </div>
             <div class="setting-row">
                 <div>残機</div>
-                <input type="number" id="tpPlayerLives" class="tp-input" value="3" min="0" max="99" />
+                <input type="number" id="tpPlayerLives" class="tp-input" value="5" min="0" max="99" />
             </div>
 
             <div style="height: 8px"></div>

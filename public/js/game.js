@@ -87,21 +87,20 @@ function loadAudioSettings() {
             return {
                 sfx: typeof settings.sfx === "number" ? settings.sfx : 0.4,
                 bgm: typeof settings.bgm === "number" ? settings.bgm : 0.3,
-                boostSound:
-                    typeof settings.boostSound === "boolean"
-                        ? settings.boostSound
-                        : false,
+                boostSound: typeof settings.boostSound === "boolean" ? settings.boostSound : false,
+                warpBass: typeof settings.warpBass === "boolean" ? settings.warpBass : false,
             };
     } catch (e) { }
-    return { sfx: 0.4, bgm: 0.3, boostSound: false };
+    return { sfx: 0.4, bgm: 0.3, boostSound: false, warpBass: false };
 }
-function saveAudioSettings(sfxVol, bgmVol, boostSoundFlag) {
+function saveAudioSettings(sfxVol, bgmVol, boostSoundFlag, warpBassFlag) {
     localStorage.setItem(
         "audioSettings_v1",
         JSON.stringify({
             sfx: sfxVol,
             bgm: bgmVol,
             boostSound: boostSoundFlag,
+            warpBass: warpBassFlag,
         }),
     );
 }
@@ -313,8 +312,13 @@ function initAudio() {
 }
 
 // --- UI効果音 (2種類: 通常クリック / 戻る) ---
+// オーディオが未初期化でもボタンクリック時に初期化して即再生する
 function playClickSound() {
-    if (!audioCtx || audioCtx.state === "suspended") return;
+    if (!audioCtx) { enableAudioGlobally(); }
+    if (!audioCtx || audioCtx.state === "suspended") {
+        if (audioCtx) audioCtx.resume().catch(() => {});
+        return;
+    }
     const now = audioCtx.currentTime;
     const osc = audioCtx.createOscillator();
     osc.type = "sine";
@@ -330,7 +334,11 @@ function playClickSound() {
 }
 
 function playCancelSound() {
-    if (!audioCtx || audioCtx.state === "suspended") return;
+    if (!audioCtx) { enableAudioGlobally(); }
+    if (!audioCtx || audioCtx.state === "suspended") {
+        if (audioCtx) audioCtx.resume().catch(() => {});
+        return;
+    }
     const now = audioCtx.currentTime;
     const osc = audioCtx.createOscillator();
     osc.type = "sine";
@@ -349,6 +357,8 @@ function playCancelSound() {
 document.addEventListener("mousedown", (e) => {
     if (!(e.target.closest("button") || e.target.closest(".toggle") ||
         e.target.closest(".team-btn") || e.target.closest('input[type="checkbox"]'))) return;
+    // ボタンクリック時にオーディオが未初期化なら初期化する
+    enableAudioGlobally();
     const btn = e.target.closest("button");
     // 戻る・閉じるボタンだけ別音
     if (btn && (
@@ -457,18 +467,28 @@ function playPowerUpSound() {
 }
 
 /* ========== 初期化コントロール ========== */
-let controlMode = localStorage.getItem("controlMode_v1") || "mouse";
-const isMobileDevice =
-    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+// PCはデフォルトでエイムマウス同期(mouse)、スマホは最初からタッチUI使用
+let defaultControlMode = "mouse";
+
+let controlMode = localStorage.getItem("controlMode_v1") || defaultControlMode;
+// デバイス判定: navigator.userAgentData (高精度) → UA文字列 → タッチ機能のフォールバック
+const isMobileDevice = (() => {
+    // 1. navigator.userAgentData が使える場合（Chrome 90+ 等）
+    if (navigator.userAgentData && typeof navigator.userAgentData.mobile === 'boolean') {
+        return navigator.userAgentData.mobile;
+    }
+    // 2. UA文字列 + タッチ機能で判定
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
         navigator.userAgent,
     ) ||
-    "ontouchstart" in window ||
-    navigator.maxTouchPoints > 0;
+    ("ontouchstart" in window && navigator.maxTouchPoints > 0 &&
+     !/Windows NT/i.test(navigator.userAgent));
+})();
 let forceTouchUI_saved = localStorage.getItem("forceTouchUI_v1");
 let useTouchUI =
     forceTouchUI_saved !== null
         ? forceTouchUI_saved === "1"
-        : isMobileDevice;
+        : isMobileDevice; // スマホ初期値=表示、PC初期値=非表示
 
 const audioHint = document.getElementById("audioHint");
 
@@ -476,7 +496,7 @@ const audioHint = document.getElementById("audioHint");
 function enableAudioGlobally() {
     if (!audioCtx) initAudio();
 
-    // ユーザー操作の同期コールスタック内でダミー再生を行うことでメディア再生制限を確実に解除する
+    // ユーザー操作の同期コールスタック内で直接playを呼ぶことでSafariの制限を解除する
     if (bgmAudio && bgmAudio.paused) {
         let p = bgmAudio.play();
         if (p && p.catch) p.catch(() => { });
@@ -486,7 +506,7 @@ function enableAudioGlobally() {
         audioCtx.resume().then(() => {
             if (window._currentBgmReq === "battle" && typeof window.playBattleBGM === "function") window.playBattleBGM();
             else if (window._currentBgmReq === "title" && typeof window.playTitleBGM === "function") window.playTitleBGM();
-        });
+        }).catch(() => {});
     } else if (audioCtx && audioCtx.state === "running") {
         if (window._currentBgmReq === "battle" && typeof window.playBattleBGM === "function") window.playBattleBGM();
         else if (window._currentBgmReq === "title" && typeof window.playTitleBGM === "function") window.playTitleBGM();
@@ -544,6 +564,298 @@ function screenFadeIn(duration, delay) {
             _fadeOverlay.style.pointerEvents = 'none'; // フェードイン完了後にブロック解除
         }, duration);
     }, delay || 0);
+}
+
+// 超光速ワームホール（ハイパースペース）トランジション
+function playWarpTransition(callback) {
+    const overlay = document.getElementById("warpTransitionOverlay");
+    const canvas = document.getElementById("warpStarCanvas");
+    if (!overlay || !canvas) {
+        screenFadeOut(1200, "#ffffff", () => {
+            screenFadeIn(1200, 0);
+            if (callback) callback();
+        });
+        return;
+    }
+
+    // アクティブなUI要素（モーダルなど）をゆっくりフェードアウトさせる
+    const activeModals = document.querySelectorAll('.setting-modal[style*="display: block"], .setting-modal[style*="display: flex"], #modeSelectModal[style*="display: block"], #roomWaitModal[style*="display: flex"]');
+    activeModals.forEach(el => {
+        el.style.transition = "opacity 0.6s ease-in-out";
+        el.style.opacity = "0";
+        setTimeout(() => {
+            el.style.display = "none";
+            el.style.opacity = "1";
+        }, 600);
+    });
+
+    // ワープ空間（オーバーレイ）をUIのフェードアウトと同時にクロスフェードで表示する
+    overlay.style.opacity = "0";
+    overlay.style.display = "block";
+    overlay.style.backgroundColor = "transparent"; // 背後の星空の上にワープを重ねる
+    overlay.offsetHeight; 
+    overlay.style.transition = "opacity 0.6s ease-in-out";
+    overlay.style.opacity = "1";
+
+        const ctx = canvas.getContext("2d", { alpha: false });
+        let w = canvas.width = window.innerWidth;
+        let h = canvas.height = window.innerHeight;
+        let cx = w / 2;
+        let cy = h / 2;
+
+        window.addEventListener("resize", () => {
+            w = canvas.width = window.innerWidth;
+            h = canvas.height = window.innerHeight;
+            cx = w / 2;
+            cy = h / 2;
+        });
+
+        const particles = [];
+        const PARTICLE_COUNT = 400;
+        const rings = [];
+        let animationId;
+        let startTime = performance.now();
+        const DURATION = 2800; // アニメーション全体の長さ
+
+    // パーティクル（星・光の筋）初期化
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+        particles.push({
+            x: (Math.random() - 0.5) * w,
+            y: (Math.random() - 0.5) * h,
+            z: Math.random() * 1000 + 100, // Z深度
+            prevZ: 0,
+            baseColor: Math.random() > 0.5 ? [0, 240, 255] : [255, 255, 255],
+            size: Math.random() * 2 + 0.5
+        });
+    }
+
+    // トンネル（3Dリング）初期化
+    for (let i = 0; i < 20; i++) {
+        rings.push({
+            z: i * 150,
+            radius: 800 + Math.random() * 200,
+            sides: 6 + Math.floor(Math.random() * 4),
+            rotation: Math.random() * Math.PI,
+            rotSpeed: (Math.random() - 0.5) * 0.05
+        });
+    }
+
+        startTime = performance.now();
+        
+        // オーディオ演出（没入感のある重低音＋加速シンセ）
+        if (audioCtx && audioCtx.state !== "suspended") {
+            const now = audioCtx.currentTime;
+            
+            // 全てのワープサウンドは設定でONのときのみ鳴る
+            if (audioSettings.warpBass) {
+                // 低音のうなり（ベース）
+                const oscBase = audioCtx.createOscillator();
+                oscBase.type = "sine";
+                oscBase.frequency.setValueAtTime(40, now);
+                oscBase.frequency.exponentialRampToValueAtTime(150, now + 1.5);
+                const gainBase = audioCtx.createGain();
+                gainBase.gain.setValueAtTime(0, now);
+                gainBase.gain.linearRampToValueAtTime(1.2, now + 0.5);
+                gainBase.gain.linearRampToValueAtTime(0.01, now + 2.5);
+                oscBase.connect(gainBase);
+                gainBase.connect(sfxGain);
+                oscBase.start(now);
+                oscBase.stop(now + 2.6);
+
+                // 加速する高音（シンセ）
+                const oscHigh = audioCtx.createOscillator();
+                oscHigh.type = "sawtooth";
+                oscHigh.frequency.setValueAtTime(100, now + 0.5);
+                oscHigh.frequency.exponentialRampToValueAtTime(2000, now + 2.2);
+                const gainHigh = audioCtx.createGain();
+                gainHigh.gain.setValueAtTime(0, now + 0.5);
+                gainHigh.gain.linearRampToValueAtTime(0.8, now + 1.8);
+                gainHigh.gain.exponentialRampToValueAtTime(0.01, now + 2.6);
+                
+                // フィルターでこもった音から開く演出
+                const filter = audioCtx.createBiquadFilter();
+                filter.type = "lowpass";
+                filter.frequency.setValueAtTime(200, now + 0.5);
+                filter.frequency.exponentialRampToValueAtTime(8000, now + 2.0);
+                
+                oscHigh.connect(filter);
+                filter.connect(gainHigh);
+                gainHigh.connect(sfxGain);
+                oscHigh.start(now + 0.5);
+                oscHigh.stop(now + 2.7);
+                
+                // 爆発音（フラッシュ）
+                setTimeout(() => {
+                    try { playExplosionSound("large"); } catch(e) {}
+                }, 2200);
+            }
+        } // end of audio if
+
+    let isFinished = false;
+
+    // メイン描画ループ
+    function render(time) {
+        if (isFinished) return;
+        const elapsed = time - startTime;
+        let progress = Math.min(elapsed / DURATION, 1.0); // 0.0 to 1.0
+        
+        // 残像効果のためのクリア
+        ctx.fillStyle = `rgba(5, 5, 10, ${0.15 + (1 - progress) * 0.2})`;
+        ctx.fillRect(0, 0, w, h);
+
+        // アニメーション進行度による速度変化
+        const baseSpeed = 10;
+        const speedMultiplier = 1 + Math.pow(progress, 3) * 60; // 指数関数的に加速
+        const currentSpeed = baseSpeed * speedMultiplier;
+        
+        // グリッチ/フラッシュの強さ
+        let flashIntensity = 0;
+        let shake = 0;
+        if (progress > 0.8) {
+            flashIntensity = (progress - 0.8) * 5; // 0 to 1
+            shake = flashIntensity * 15;
+            // 画面のランダムな揺れ
+            if (shake > 0) {
+                ctx.save();
+                ctx.translate((Math.random()-0.5)*shake, (Math.random()-0.5)*shake);
+            }
+        }
+
+        // カメラ（視界）の中心オフセット
+        const camX = cx + Math.sin(time * 0.002) * (50 * progress);
+        const camY = cy + Math.cos(time * 0.003) * (50 * progress);
+
+        // トンネル（ワイヤフレーム）の描画
+        ctx.lineWidth = 1 + progress * 2;
+        const ringZOffset = Math.sin(time * 0.001) * 20;
+
+        for (let i = 0; i < rings.length; i++) {
+            const ring = rings[i];
+            ring.z -= currentSpeed * 0.5;
+            if (ring.z < 10) {
+                ring.z = 3000; // 奥へループ再配置
+                ring.rotSpeed = (Math.random() - 0.5) * 0.08;
+            }
+            ring.rotation += ring.rotSpeed * Math.min(progress * 3 + 1, 10);
+
+            // 3D -> 2D投影
+            const zRatio = 800 / Math.max(ring.z + ringZOffset, 1);
+            if (zRatio < 0) continue; // 後ろにあるものは描画しない
+
+            const r2d = ring.radius * zRatio;
+            const alpha = Math.min(1.0, zRatio * 0.5) * (1 - Math.pow((3000 - ring.z)/3000, 4));
+
+            // 赤/シアンのサイバーカラーへ変化
+            const colorR = Math.floor(0 + progress * 255);
+            const colorG = Math.floor(240 - progress * 200);
+            const colorB = Math.floor(255 - progress * 100);
+
+            ctx.strokeStyle = `rgba(${colorR}, ${colorG}, ${colorB}, ${alpha * (0.1 + progress * 0.5)})`;
+            ctx.beginPath();
+            
+            for (let s = 0; s <= ring.sides; s++) {
+                const angle = ring.rotation + (s / ring.sides) * Math.PI * 2;
+                const px = camX + Math.cos(angle) * r2d + (Math.sin(time*0.005 + ring.z*0.01) * 30 * progress);
+                const py = camY + Math.sin(angle) * r2d + (Math.cos(time*0.004 + ring.z*0.01) * 30 * progress);
+                if (s === 0) ctx.moveTo(px, py);
+                else ctx.lineTo(px, py);
+            }
+            ctx.stroke();
+        }
+
+        // パーティクル（ワープ星）の描画
+        for (let i = 0; i < particles.length; i++) {
+            let p = particles[i];
+            p.prevZ = p.z;
+            p.z -= currentSpeed;
+
+            if (p.z <= 10) {
+                p.x = (Math.random() - 0.5) * w * 2;
+                p.y = (Math.random() - 0.5) * h * 2;
+                p.z = 2000 + Math.random() * 1000;
+                p.prevZ = p.z;
+                p.size = Math.random() * 2 + 0.5;
+            }
+
+            // 投影
+            const scale = 800 / p.z;
+            const prevScale = 800 / Math.max(p.prevZ, 1);
+            
+            const px = camX + p.x * scale;
+            const py = camY + p.y * scale;
+            const ppx = camX + p.x * prevScale;
+            const ppy = camY + p.y * prevScale;
+
+            // 透過度と色
+            const alpha = Math.min(1.0, 1500 / p.z);
+            let [r, g, b] = p.baseColor;
+            
+            if (progress > 0.5) {
+                // 赤方偏移/青方偏移のシミュレーション（手首は赤・オレンジへ）
+                r = Math.min(255, r + progress * 100);
+                g = Math.max(50, g - progress * 100);
+                b = Math.max(50, b - progress * 100);
+            }
+
+            ctx.lineWidth = p.size * scale;
+            ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+            ctx.beginPath();
+            ctx.moveTo(ppx, ppy);
+            ctx.lineTo(px, py);
+            ctx.stroke();
+
+            // フレア
+            if (p.size > 2) {
+                ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.5})`;
+                ctx.beginPath();
+                ctx.arc(px, py, p.size * scale * 1.5, 0, Math.PI*2);
+                ctx.fill();
+            }
+        }
+
+        if (shake > 0) ctx.restore(); // 画面揺れリセット
+
+        // グリッチエフェクト (終盤)
+        if (flashIntensity > 0.3) {
+            ctx.fillStyle = `rgba(255, 255, 255, ${flashIntensity * 0.1})`;
+            ctx.fillRect(0, Math.random() * h, w, Math.random() * 50);
+            
+            if (Math.random() > 0.7) {
+                // 色収差のような横ずれ
+                const sliceY = Math.random() * h;
+                const sliceH = Math.random() * 100;
+                const imgData = ctx.getImageData(0, sliceY, w, sliceH);
+                ctx.putImageData(imgData, (Math.random()-0.5)*50 * flashIntensity, sliceY);
+            }
+        }
+
+        // ホワイトアウト
+        if (flashIntensity > 0) {
+            ctx.fillStyle = `rgba(255, 255, 255, ${Math.pow(flashIntensity, 2)})`;
+            ctx.fillRect(0, 0, w, h);
+        }
+
+        if (elapsed < DURATION) {
+            animationId = requestAnimationFrame(render);
+        } else {
+            // アニメーション完了
+            isFinished = true;
+            if (callback) callback();
+            
+            // 白フラッシュで抜ける演出 (既存関数を使用)
+            screenFadeOut(50, "#ffffff", () => {
+                overlay.style.opacity = "0";
+                setTimeout(() => { 
+                    overlay.style.display = "none"; 
+                    ctx.clearRect(0,0,w,h);
+                }, 300);
+                screenFadeIn(1200, 0);
+            });
+        }
+    }
+
+    // アニメーション開始
+    animationId = requestAnimationFrame(render);
 }
 
 /* ========== 基本ユーティリティ ========== */
@@ -885,7 +1197,7 @@ let keys = {};
 let mouse = { x: 0, y: 0, down: false };
 let bindingAction = null;
 
-const GAME_VERSION = "1.0.66";
+const GAME_VERSION = "1.0.77";
 let running = false,
     showHelp = false;
 let isPaused = false;
@@ -2028,9 +2340,8 @@ window.connectToPhoton = function (roomId, isHost) {
 
 function startCountdownAndPlay(settings) {
     if (typeof window.stopBGM === "function") window.stopBGM();
-    screenFadeOut(1200, "#ffffff", () => {
+    playWarpTransition(() => {
         document.getElementById("roomWaitModal").style.display = "none";
-        screenFadeIn(1200, 0);
 
         setTimeout(() => {
             const cdUI = document.getElementById("countdownUI");
@@ -2071,9 +2382,8 @@ function startCountdownAndPlay(settings) {
 
 function startSinglePlayerCountdown() {
     if (typeof window.stopBGM === "function") window.stopBGM();
-    screenFadeOut(1200, "#ffffff", () => {
+    playWarpTransition(() => {
         document.getElementById("modeSelectModal").style.display = "none";
-        screenFadeIn(1200, 0);
 
         setTimeout(() => {
             const cdUI = document.getElementById("countdownUI");
@@ -2173,7 +2483,7 @@ function initGame() {
         ? window.currentRoomSettings.playerLives !== undefined
             ? window.currentRoomSettings.playerLives
             : 5
-        : 3;
+        : 5;
     lives = initPlayerLives;
 
     const player = {
@@ -4806,10 +5116,9 @@ const toggleFullscreenElem = document.getElementById("toggleFullscreen");
 
 const bgmVolumeSlider = document.getElementById("bgmVolume");
 const sfxVolumeSlider = document.getElementById("sfxVolume");
-const damageTextSizeSlider = document.getElementById(
-    "damageTextSizeSlider",
-);
+const damageTextSizeSlider = document.getElementById("damageTextSizeSlider");
 const toggleBoostSoundElem = document.getElementById("toggleBoostSound");
+const toggleWarpBassElem = document.getElementById("toggleWarpBass");
 
 const btnOpenSettingsView = document.getElementById("btnOpenSettingsView");
 const pauseMainView = document.getElementById("pauseMainView");
@@ -4877,7 +5186,7 @@ btnOpenSettingsView?.addEventListener("click", () => {
 
 btnBackToPauseMain?.addEventListener("click", () => {
     saveFeatureSettings(featureSettings); // Save display settings
-    saveAudioSettings(audioSettings.sfx, audioSettings.bgm, audioSettings.boostSound); // Save audio settings
+    saveAudioSettings(audioSettings.sfx, audioSettings.bgm, audioSettings.boostSound, audioSettings.warpBass); // Save audio settings
 
     if (isSettingsFromHome) {
         document.getElementById("pauseSettingsMenu").style.display = "none";
@@ -5238,14 +5547,21 @@ wireToggle(
     (v) => {
         audioSettings.boostSound = v;
         setToggleElem(toggleBoostSoundElem, v);
-        saveAudioSettings(
-            audioSettings.sfx,
-            audioSettings.bgm,
-            audioSettings.boostSound,
-        );
+        saveAudioSettings(audioSettings.sfx, audioSettings.bgm, audioSettings.boostSound, audioSettings.warpBass);
     },
 );
 setToggleElem(toggleBoostSoundElem, audioSettings.boostSound);
+
+wireToggle(
+    toggleWarpBassElem,
+    () => audioSettings.warpBass,
+    (v) => {
+        audioSettings.warpBass = v;
+        setToggleElem(toggleWarpBassElem, v);
+        saveAudioSettings(audioSettings.sfx, audioSettings.bgm, audioSettings.boostSound, audioSettings.warpBass);
+    },
+);
+setToggleElem(toggleWarpBassElem, audioSettings.warpBass);
 
 lightweightToggle?.addEventListener("click", () => {
     applyLightweightMode(!lightweightMode);
@@ -5377,21 +5693,13 @@ function applyBgmVolume() {
     audioSettings.bgm = vol;
     if (bgmGainNode) bgmGainNode.gain.value = vol;
     if (bgmAudio) bgmAudio.volume = vol;
-    saveAudioSettings(
-        audioSettings.sfx,
-        audioSettings.bgm,
-        audioSettings.boostSound,
-    );
+    saveAudioSettings(audioSettings.sfx, audioSettings.bgm, audioSettings.boostSound, audioSettings.warpBass);
 }
 function applySfxVolume() {
     const vol = parseFloat(sfxVolumeSlider.value);
     audioSettings.sfx = vol;
     if (sfxGain) sfxGain.gain.value = vol;
-    saveAudioSettings(
-        audioSettings.sfx,
-        audioSettings.bgm,
-        audioSettings.boostSound,
-    );
+    saveAudioSettings(audioSettings.sfx, audioSettings.bgm, audioSettings.boostSound, audioSettings.warpBass);
 }
 bgmVolumeSlider?.addEventListener("input", applyBgmVolume);
 bgmVolumeSlider?.addEventListener("change", applyBgmVolume);
@@ -5639,7 +5947,7 @@ document
                 parseInt(document.getElementById("tpPlayerBulletSpeed").value) ||
                 47,
             playerLives:
-                parseInt(document.getElementById("tpPlayerLives").value) || 3,
+                parseInt(document.getElementById("tpPlayerLives").value) || 5,
             aiHp: parseInt(document.getElementById("tpAiHp").value) || 45,
             aiShootCd:
                 parseInt(document.getElementById("tpAiShootCd").value) || 140,
@@ -5777,8 +6085,124 @@ if (isMobileDevice) {
     }, 300);
 }
 
-checkAndSetNickname();
-requestAnimationFrame(frame);
+/* ========== スタート画面 ========== */
+(function initStartScreen() {
+    const startScreen = document.getElementById("startScreen");
+    if (!startScreen) { checkAndSetNickname(); requestAnimationFrame(frame); return; }
+
+    // バージョン表示
+    const svEl = document.getElementById("startVersionText");
+    if (svEl) svEl.textContent = "v" + GAME_VERSION;
+
+    // デバイス判定でテキスト切替
+    const actionText = document.getElementById("startActionText");
+    if (actionText) {
+        actionText.textContent = isMobileDevice ? "TAP TO START" : "CLICK TO START";
+    }
+
+    // 星空アニメーション
+    const starCanvas = document.getElementById("startStarCanvas");
+    if (starCanvas) {
+        const sCtx = starCanvas.getContext("2d");
+        const stars = [];
+        const STAR_COUNT = 200;
+
+        function resizeStarCanvas() {
+            starCanvas.width = window.innerWidth;
+            starCanvas.height = window.innerHeight;
+        }
+        resizeStarCanvas();
+        window.addEventListener("resize", resizeStarCanvas);
+
+        for (let i = 0; i < STAR_COUNT; i++) {
+            stars.push({
+                x: Math.random() * starCanvas.width,
+                y: Math.random() * starCanvas.height,
+                size: Math.random() * 2 + 0.5,
+                speed: Math.random() * 0.5 + 0.1,
+                alpha: Math.random() * 0.8 + 0.2,
+                twinkleSpeed: Math.random() * 0.02 + 0.005,
+                twinklePhase: Math.random() * Math.PI * 2,
+            });
+        }
+
+    // ==========================================
+    // クリック/タップでスタート（シンプルなフェードアウト）
+    // ==========================================
+    let startTriggered = false;
+
+    function handleStart(e) {
+        if (startTriggered) return;
+        startTriggered = true;
+
+        enableAudioGlobally();
+
+        // スタート画面全体をCSSアニメーションで自然にフェードアウト
+        startScreen.classList.add("start-hidden");
+        
+        // 0.85秒（フェードアウトの完了）を待ってから次の画面へ
+        setTimeout(() => {
+            if (startScreen._cleanupStars) startScreen._cleanupStars();
+            startScreen.style.display = "none";
+            checkAndSetNickname();
+        }, 850);
+    }
+
+    startScreen.addEventListener("click", handleStart);
+    startScreen.addEventListener("touchend", (e) => {
+        e.preventDefault();
+        handleStart(e);
+    });
+
+    let startAnimId = null;
+    function animateStars() {
+        // 残像効果
+        const trailAlpha = startTriggered ? 0.3 : 1.0;
+        sCtx.fillStyle = `rgba(3, 5, 15, ${trailAlpha})`;
+        sCtx.fillRect(0, 0, starCanvas.width, starCanvas.height);
+        
+        const t = performance.now() * 0.001;
+
+        // 平常時の星空描画
+        for (const s of stars) {
+            s.y -= s.speed;
+            if (s.y < -5) {
+                s.y = starCanvas.height + 5;
+                s.x = Math.random() * starCanvas.width;
+            }
+            const twinkle = Math.sin(t * s.twinkleSpeed * 60 + s.twinklePhase) * 0.3 + 0.7;
+            const a = s.alpha * twinkle;
+            const blue = Math.floor(200 + s.size * 20);
+            sCtx.fillStyle = `rgba(${180 + Math.floor(s.size * 30)}, ${200 + Math.floor(s.size * 20)}, ${blue}, ${a})`;
+            sCtx.beginPath();
+            sCtx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+            sCtx.fill();
+            if (s.size > 1.5) {
+                sCtx.fillStyle = `rgba(0, 240, 255, ${a * 0.15})`;
+                sCtx.beginPath();
+                sCtx.arc(s.x, s.y, s.size * 3, 0, Math.PI * 2);
+                sCtx.fill();
+            }
+        }
+
+        startAnimId = requestAnimationFrame(animateStars);
+    }
+    animateStars();
+
+    // クリーンアップ用
+    startScreen._cleanupStars = function() {
+        if (startAnimId) cancelAnimationFrame(startAnimId);
+        window.removeEventListener("resize", resizeStarCanvas);
+    };
+    } // End of if (starCanvas)
+
+    // ===============================================
+    // 重要！！！ここを消してはいけなかった！！！
+    // ゲーム描画本体のループ起動を確保（黒画面バグの修正）
+    // ===============================================
+    requestAnimationFrame(frame);
+
+})();
 
 /* ========== UI Layout Editor Logic ========== */
 function setupLayoutEditor() {
