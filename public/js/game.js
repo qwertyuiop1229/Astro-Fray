@@ -1072,11 +1072,15 @@ const UILayoutManager = (() => {
                     el.style.position = 'fixed';
                     el.style.left = cfg.x + 'vw';
                     el.style.top = cfg.y + 'vh';
+                    el.style.right = 'auto';
+                    el.style.bottom = 'auto';
                     el.style.transform = `translate(-50%, -50%) scale(${cfg.s})`;
                 } else {
                     el.style.position = '';
                     el.style.left = '';
                     el.style.top = '';
+                    el.style.right = '';
+                    el.style.bottom = '';
                     el.style.transform = '';
                 }
             });
@@ -1086,12 +1090,14 @@ const UILayoutManager = (() => {
 })();
 
 // Canvas UI drawing helper
-function getCanvasLayout(id, defX, defY) {
+function getCanvasLayout(id, defX, defY, w = 0, h = 0) {
     const cfg = UILayoutManager.get(id);
     if (!cfg) return { x: defX, y: defY, s: 1 };
     const cw = (canvas.width / dpr);
     const ch = (canvas.height / dpr);
-    return { x: (cfg.x / 100) * cw, y: (cfg.y / 100) * ch, s: cfg.s };
+    const centerX = (cfg.x / 100) * cw;
+    const centerY = (cfg.y / 100) * ch;
+    return { x: centerX - (w * cfg.s) / 2, y: centerY - (h * cfg.s) / 2, s: cfg.s };
 }
 
 let cameraShake = 0;
@@ -1200,7 +1206,7 @@ let keys = {};
 let mouse = { x: 0, y: 0, movementX: 0, movementY: 0, down: false };
 let bindingAction = null;
 
-const GAME_VERSION = "1.0.89";
+const GAME_VERSION = "1.0.90";
 let running = false,
     showHelp = false;
 let isPaused = false;
@@ -5079,7 +5085,7 @@ function drawUI(ctx, vLeft, vRight, vTop, vBottom) {
             mapH = 140;
         const mX = 32 + safeAreaMarginX;
         const mY = vh - mapH - 32 - safeAreaMarginY;
-        const mapLayout = getCanvasLayout('hud_minimap', mX, mY);
+        const mapLayout = getCanvasLayout('hud_minimap', mX, mY, mapW, mapH);
 
         ctx.save();
         ctx.translate(mapLayout.x, mapLayout.y);
