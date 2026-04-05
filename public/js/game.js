@@ -316,7 +316,7 @@ function initAudio() {
 function playClickSound() {
     if (!audioCtx) { enableAudioGlobally(); }
     if (!audioCtx || audioCtx.state === "suspended") {
-        if (audioCtx) audioCtx.resume().catch(() => {});
+        if (audioCtx) audioCtx.resume().catch(() => { });
         return;
     }
     const now = audioCtx.currentTime;
@@ -336,7 +336,7 @@ function playClickSound() {
 function playCancelSound() {
     if (!audioCtx) { enableAudioGlobally(); }
     if (!audioCtx || audioCtx.state === "suspended") {
-        if (audioCtx) audioCtx.resume().catch(() => {});
+        if (audioCtx) audioCtx.resume().catch(() => { });
         return;
     }
     const now = audioCtx.currentTime;
@@ -483,8 +483,8 @@ const isMobileDevice = (() => {
     return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
         navigator.userAgent,
     ) ||
-    ("ontouchstart" in window && navigator.maxTouchPoints > 0 &&
-     !/Windows NT/i.test(navigator.userAgent));
+        ("ontouchstart" in window && navigator.maxTouchPoints > 0 &&
+            !/Windows NT/i.test(navigator.userAgent));
 })();
 let forceTouchUI_saved = localStorage.getItem("forceTouchUI_v1");
 let useTouchUI =
@@ -508,7 +508,7 @@ function enableAudioGlobally() {
         audioCtx.resume().then(() => {
             if (window._currentBgmReq === "battle" && typeof window.playBattleBGM === "function") window.playBattleBGM();
             else if (window._currentBgmReq === "title" && typeof window.playTitleBGM === "function") window.playTitleBGM();
-        }).catch(() => {});
+        }).catch(() => { });
     } else if (audioCtx && audioCtx.state === "running") {
         if (window._currentBgmReq === "battle" && typeof window.playBattleBGM === "function") window.playBattleBGM();
         else if (window._currentBgmReq === "title" && typeof window.playTitleBGM === "function") window.playTitleBGM();
@@ -595,29 +595,29 @@ function playWarpTransition(callback) {
     overlay.style.opacity = "0";
     overlay.style.display = "block";
     overlay.style.backgroundColor = "transparent"; // 背後の星空の上にワープを重ねる
-    overlay.offsetHeight; 
+    overlay.offsetHeight;
     overlay.style.transition = "opacity 0.6s ease-in-out";
     overlay.style.opacity = "1";
 
-        const ctx = canvas.getContext("2d", { alpha: false });
-        let w = canvas.width = window.innerWidth;
-        let h = canvas.height = window.innerHeight;
-        let cx = w / 2;
-        let cy = h / 2;
+    const ctx = canvas.getContext("2d", { alpha: false });
+    let w = canvas.width = window.innerWidth;
+    let h = canvas.height = window.innerHeight;
+    let cx = w / 2;
+    let cy = h / 2;
 
-        window.addEventListener("resize", () => {
-            w = canvas.width = window.innerWidth;
-            h = canvas.height = window.innerHeight;
-            cx = w / 2;
-            cy = h / 2;
-        });
+    window.addEventListener("resize", () => {
+        w = canvas.width = window.innerWidth;
+        h = canvas.height = window.innerHeight;
+        cx = w / 2;
+        cy = h / 2;
+    });
 
-        const particles = [];
-        const PARTICLE_COUNT = 400;
-        const rings = [];
-        let animationId;
-        let startTime = performance.now();
-        const DURATION = 2800; // アニメーション全体の長さ
+    const particles = [];
+    const PARTICLE_COUNT = 400;
+    const rings = [];
+    let animationId;
+    let startTime = performance.now();
+    const DURATION = 2800; // アニメーション全体の長さ
 
     // パーティクル（星・光の筋）初期化
     for (let i = 0; i < PARTICLE_COUNT; i++) {
@@ -642,56 +642,56 @@ function playWarpTransition(callback) {
         });
     }
 
-        startTime = performance.now();
-        
-        // オーディオ演出（没入感のある重低音＋加速シンセ）
-        if (audioCtx && audioCtx.state !== "suspended") {
-            const now = audioCtx.currentTime;
-            
-            // 全てのワープサウンドは設定でONのときのみ鳴る
-            if (audioSettings.warpBass) {
-                // 低音のうなり（ベース）
-                const oscBase = audioCtx.createOscillator();
-                oscBase.type = "sine";
-                oscBase.frequency.setValueAtTime(40, now);
-                oscBase.frequency.exponentialRampToValueAtTime(150, now + 1.5);
-                const gainBase = audioCtx.createGain();
-                gainBase.gain.setValueAtTime(0, now);
-                gainBase.gain.linearRampToValueAtTime(1.2, now + 0.5);
-                gainBase.gain.linearRampToValueAtTime(0.01, now + 2.5);
-                oscBase.connect(gainBase);
-                gainBase.connect(sfxGain);
-                oscBase.start(now);
-                oscBase.stop(now + 2.6);
+    startTime = performance.now();
 
-                // 加速する高音（シンセ）
-                const oscHigh = audioCtx.createOscillator();
-                oscHigh.type = "sawtooth";
-                oscHigh.frequency.setValueAtTime(100, now + 0.5);
-                oscHigh.frequency.exponentialRampToValueAtTime(2000, now + 2.2);
-                const gainHigh = audioCtx.createGain();
-                gainHigh.gain.setValueAtTime(0, now + 0.5);
-                gainHigh.gain.linearRampToValueAtTime(0.8, now + 1.8);
-                gainHigh.gain.exponentialRampToValueAtTime(0.01, now + 2.6);
-                
-                // フィルターでこもった音から開く演出
-                const filter = audioCtx.createBiquadFilter();
-                filter.type = "lowpass";
-                filter.frequency.setValueAtTime(200, now + 0.5);
-                filter.frequency.exponentialRampToValueAtTime(8000, now + 2.0);
-                
-                oscHigh.connect(filter);
-                filter.connect(gainHigh);
-                gainHigh.connect(sfxGain);
-                oscHigh.start(now + 0.5);
-                oscHigh.stop(now + 2.7);
-                
-                // 爆発音（フラッシュ）
-                setTimeout(() => {
-                    try { playExplosionSound("large"); } catch(e) {}
-                }, 2200);
-            }
-        } // end of audio if
+    // オーディオ演出（没入感のある重低音＋加速シンセ）
+    if (audioCtx && audioCtx.state !== "suspended") {
+        const now = audioCtx.currentTime;
+
+        // 全てのワープサウンドは設定でONのときのみ鳴る
+        if (audioSettings.warpBass) {
+            // 低音のうなり（ベース）
+            const oscBase = audioCtx.createOscillator();
+            oscBase.type = "sine";
+            oscBase.frequency.setValueAtTime(40, now);
+            oscBase.frequency.exponentialRampToValueAtTime(150, now + 1.5);
+            const gainBase = audioCtx.createGain();
+            gainBase.gain.setValueAtTime(0, now);
+            gainBase.gain.linearRampToValueAtTime(1.2, now + 0.5);
+            gainBase.gain.linearRampToValueAtTime(0.01, now + 2.5);
+            oscBase.connect(gainBase);
+            gainBase.connect(sfxGain);
+            oscBase.start(now);
+            oscBase.stop(now + 2.6);
+
+            // 加速する高音（シンセ）
+            const oscHigh = audioCtx.createOscillator();
+            oscHigh.type = "sawtooth";
+            oscHigh.frequency.setValueAtTime(100, now + 0.5);
+            oscHigh.frequency.exponentialRampToValueAtTime(2000, now + 2.2);
+            const gainHigh = audioCtx.createGain();
+            gainHigh.gain.setValueAtTime(0, now + 0.5);
+            gainHigh.gain.linearRampToValueAtTime(0.8, now + 1.8);
+            gainHigh.gain.exponentialRampToValueAtTime(0.01, now + 2.6);
+
+            // フィルターでこもった音から開く演出
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = "lowpass";
+            filter.frequency.setValueAtTime(200, now + 0.5);
+            filter.frequency.exponentialRampToValueAtTime(8000, now + 2.0);
+
+            oscHigh.connect(filter);
+            filter.connect(gainHigh);
+            gainHigh.connect(sfxGain);
+            oscHigh.start(now + 0.5);
+            oscHigh.stop(now + 2.7);
+
+            // 爆発音（フラッシュ）
+            setTimeout(() => {
+                try { playExplosionSound("large"); } catch (e) { }
+            }, 2200);
+        }
+    } // end of audio if
 
     let isFinished = false;
 
@@ -700,7 +700,7 @@ function playWarpTransition(callback) {
         if (isFinished) return;
         const elapsed = time - startTime;
         let progress = Math.min(elapsed / DURATION, 1.0); // 0.0 to 1.0
-        
+
         // 残像効果のためのクリア
         ctx.fillStyle = `rgba(5, 5, 10, ${0.15 + (1 - progress) * 0.2})`;
         ctx.fillRect(0, 0, w, h);
@@ -709,7 +709,7 @@ function playWarpTransition(callback) {
         const baseSpeed = 10;
         const speedMultiplier = 1 + Math.pow(progress, 3) * 60; // 指数関数的に加速
         const currentSpeed = baseSpeed * speedMultiplier;
-        
+
         // グリッチ/フラッシュの強さ
         let flashIntensity = 0;
         let shake = 0;
@@ -719,7 +719,7 @@ function playWarpTransition(callback) {
             // 画面のランダムな揺れ
             if (shake > 0) {
                 ctx.save();
-                ctx.translate((Math.random()-0.5)*shake, (Math.random()-0.5)*shake);
+                ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
             }
         }
 
@@ -745,7 +745,7 @@ function playWarpTransition(callback) {
             if (zRatio < 0) continue; // 後ろにあるものは描画しない
 
             const r2d = ring.radius * zRatio;
-            const alpha = Math.min(1.0, zRatio * 0.5) * (1 - Math.pow((3000 - ring.z)/3000, 4));
+            const alpha = Math.min(1.0, zRatio * 0.5) * (1 - Math.pow((3000 - ring.z) / 3000, 4));
 
             // 赤/シアンのサイバーカラーへ変化
             const colorR = Math.floor(0 + progress * 255);
@@ -754,11 +754,11 @@ function playWarpTransition(callback) {
 
             ctx.strokeStyle = `rgba(${colorR}, ${colorG}, ${colorB}, ${alpha * (0.1 + progress * 0.5)})`;
             ctx.beginPath();
-            
+
             for (let s = 0; s <= ring.sides; s++) {
                 const angle = ring.rotation + (s / ring.sides) * Math.PI * 2;
-                const px = camX + Math.cos(angle) * r2d + (Math.sin(time*0.005 + ring.z*0.01) * 30 * progress);
-                const py = camY + Math.sin(angle) * r2d + (Math.cos(time*0.004 + ring.z*0.01) * 30 * progress);
+                const px = camX + Math.cos(angle) * r2d + (Math.sin(time * 0.005 + ring.z * 0.01) * 30 * progress);
+                const py = camY + Math.sin(angle) * r2d + (Math.cos(time * 0.004 + ring.z * 0.01) * 30 * progress);
                 if (s === 0) ctx.moveTo(px, py);
                 else ctx.lineTo(px, py);
             }
@@ -782,7 +782,7 @@ function playWarpTransition(callback) {
             // 投影
             const scale = 800 / p.z;
             const prevScale = 800 / Math.max(p.prevZ, 1);
-            
+
             const px = camX + p.x * scale;
             const py = camY + p.y * scale;
             const ppx = camX + p.x * prevScale;
@@ -791,7 +791,7 @@ function playWarpTransition(callback) {
             // 透過度と色
             const alpha = Math.min(1.0, 1500 / p.z);
             let [r, g, b] = p.baseColor;
-            
+
             if (progress > 0.5) {
                 // 赤方偏移/青方偏移のシミュレーション（手首は赤・オレンジへ）
                 r = Math.min(255, r + progress * 100);
@@ -810,7 +810,7 @@ function playWarpTransition(callback) {
             if (p.size > 2) {
                 ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.5})`;
                 ctx.beginPath();
-                ctx.arc(px, py, p.size * scale * 1.5, 0, Math.PI*2);
+                ctx.arc(px, py, p.size * scale * 1.5, 0, Math.PI * 2);
                 ctx.fill();
             }
         }
@@ -821,13 +821,13 @@ function playWarpTransition(callback) {
         if (flashIntensity > 0.3) {
             ctx.fillStyle = `rgba(255, 255, 255, ${flashIntensity * 0.1})`;
             ctx.fillRect(0, Math.random() * h, w, Math.random() * 50);
-            
+
             if (Math.random() > 0.7) {
                 // 色収差のような横ずれ
                 const sliceY = Math.random() * h;
                 const sliceH = Math.random() * 100;
                 const imgData = ctx.getImageData(0, sliceY, w, sliceH);
-                ctx.putImageData(imgData, (Math.random()-0.5)*50 * flashIntensity, sliceY);
+                ctx.putImageData(imgData, (Math.random() - 0.5) * 50 * flashIntensity, sliceY);
             }
         }
 
@@ -843,13 +843,13 @@ function playWarpTransition(callback) {
             // アニメーション完了
             isFinished = true;
             if (callback) callback();
-            
+
             // 白フラッシュで抜ける演出 (既存関数を使用)
             screenFadeOut(50, "#ffffff", () => {
                 overlay.style.opacity = "0";
-                setTimeout(() => { 
-                    overlay.style.display = "none"; 
-                    ctx.clearRect(0,0,w,h);
+                setTimeout(() => {
+                    overlay.style.display = "none";
+                    ctx.clearRect(0, 0, w, h);
                 }, 300);
                 screenFadeIn(1200, 0);
             });
@@ -1206,7 +1206,7 @@ let keys = {};
 let mouse = { x: 0, y: 0, movementX: 0, movementY: 0, down: false };
 let bindingAction = null;
 
-const GAME_VERSION = "1.0.90";
+const GAME_VERSION = "1.3.0";
 let running = false,
     showHelp = false;
 let isPaused = false;
@@ -1261,7 +1261,7 @@ function setPauseState(paused) {
                 m.style.display = "none";
         });
         if (minecraftMode && controlMode === "mouse" && !isMobileDevice) {
-            try { canvas.requestPointerLock(); } catch(e) {}
+            try { canvas.requestPointerLock(); } catch (e) { }
         }
     }
     updateTouchUIVisibility();
@@ -1337,7 +1337,7 @@ window.addEventListener("mousedown", (e) => {
     if (e.target === canvas) {
         mouse.down = true;
         if (minecraftMode && !isPaused && !document.pointerLockElement && controlMode === "mouse" && !isMobileDevice) {
-            try { canvas.requestPointerLock(); } catch(e) {}
+            try { canvas.requestPointerLock(); } catch (e) { }
         }
     }
 });
@@ -4377,7 +4377,7 @@ function render() {
         ctx.rotate(-playerForCam.angle - Math.PI / 2);
     }
     ctx.translate(-vw / 2, -vh / 2);
-    
+
     let halfVisW = vw / 2 / zoomLevel;
     let halfVisH = vh / 2 / zoomLevel;
     if (minecraftMode && playerForCam && !playerForCam.isGhost) {
@@ -4568,7 +4568,7 @@ function render() {
         )
             continue;
         drawShip(ctx, s, sc.sx, sc.sy);
-        
+
         // Draw Aim Line
         if (s.id === playerId && featureSettings.aimLine && !s.isGhost && !gameOverMode) {
             ctx.save();
@@ -4577,14 +4577,14 @@ function render() {
             ctx.strokeStyle = "rgba(220, 220, 220, 1.0)";
             ctx.lineWidth = 1;
             ctx.beginPath();
-            
+
             // Start from slightly ahead of the ship body (offset arbitrarily instead of undefined s.size)
-            const off = 25; 
+            const off = 25;
             const startX = sc.sx + Math.cos(s.angle) * off;
             const startY = sc.sy + Math.sin(s.angle) * off;
             const endX = startX + Math.cos(s.angle) * 2000;
             const endY = startY + Math.sin(s.angle) * 2000;
-            
+
             ctx.moveTo(startX, startY);
             ctx.lineTo(endX, endY);
             ctx.stroke();
@@ -6015,7 +6015,7 @@ document.getElementById("btnLeaveRoom")?.addEventListener("click", () => {
 
 document.getElementById("btnStartGame")?.addEventListener("click", () => {
     if (minecraftMode && controlMode === "mouse" && !isMobileDevice) {
-        try { canvas.requestPointerLock(); } catch(e) {}
+        try { canvas.requestPointerLock(); } catch (e) { }
     }
     if (photonClient && photonClient.isJoinedToRoom()) {
         photonClient.raiseEvent(4, window.currentRoomSettings, {
@@ -6031,7 +6031,7 @@ document.getElementById("btnStartGame")?.addEventListener("click", () => {
 // 難易度ボタンイベント
 function startWithDifficulty(diff) {
     if (minecraftMode && controlMode === "mouse" && !isMobileDevice) {
-        try { canvas.requestPointerLock(); } catch(e) {}
+        try { canvas.requestPointerLock(); } catch (e) { }
     }
     window.currentDifficulty = diff;
     document.getElementById("difficultyModal").style.display = "none";
@@ -6405,74 +6405,74 @@ if (isMobileDevice) {
             });
         }
 
-    // ==========================================
-    // クリック/タップでスタート（シンプルなフェードアウト）
-    // ==========================================
-    let startTriggered = false;
+        // ==========================================
+        // クリック/タップでスタート（シンプルなフェードアウト）
+        // ==========================================
+        let startTriggered = false;
 
-    function handleStart(e) {
-        if (startTriggered) return;
-        startTriggered = true;
+        function handleStart(e) {
+            if (startTriggered) return;
+            startTriggered = true;
 
-        enableAudioGlobally();
+            enableAudioGlobally();
 
-        // スタート画面全体をCSSアニメーションで自然にフェードアウト
-        startScreen.classList.add("start-hidden");
-        
-        // 0.85秒（フェードアウトの完了）を待ってから次の画面へ
-        setTimeout(() => {
-            if (startScreen._cleanupStars) startScreen._cleanupStars();
-            startScreen.style.display = "none";
-            checkAndSetNickname();
-        }, 850);
-    }
+            // スタート画面全体をCSSアニメーションで自然にフェードアウト
+            startScreen.classList.add("start-hidden");
 
-    startScreen.addEventListener("click", handleStart);
-    startScreen.addEventListener("touchend", (e) => {
-        e.preventDefault();
-        handleStart(e);
-    });
-
-    let startAnimId = null;
-    function animateStars() {
-        // 残像効果
-        const trailAlpha = startTriggered ? 0.3 : 1.0;
-        sCtx.fillStyle = `rgba(3, 5, 15, ${trailAlpha})`;
-        sCtx.fillRect(0, 0, starCanvas.width, starCanvas.height);
-        
-        const t = performance.now() * 0.001;
-
-        // 平常時の星空描画
-        for (const s of stars) {
-            s.y -= s.speed;
-            if (s.y < -5) {
-                s.y = starCanvas.height + 5;
-                s.x = Math.random() * starCanvas.width;
-            }
-            const twinkle = Math.sin(t * s.twinkleSpeed * 60 + s.twinklePhase) * 0.3 + 0.7;
-            const a = s.alpha * twinkle;
-            const blue = Math.floor(200 + s.size * 20);
-            sCtx.fillStyle = `rgba(${180 + Math.floor(s.size * 30)}, ${200 + Math.floor(s.size * 20)}, ${blue}, ${a})`;
-            sCtx.beginPath();
-            sCtx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
-            sCtx.fill();
-            if (s.size > 1.5) {
-                sCtx.fillStyle = `rgba(0, 240, 255, ${a * 0.15})`;
-                sCtx.beginPath();
-                sCtx.arc(s.x, s.y, s.size * 3, 0, Math.PI * 2);
-                sCtx.fill();
-            }
+            // 0.85秒（フェードアウトの完了）を待ってから次の画面へ
+            setTimeout(() => {
+                if (startScreen._cleanupStars) startScreen._cleanupStars();
+                startScreen.style.display = "none";
+                checkAndSetNickname();
+            }, 850);
         }
 
-        startAnimId = requestAnimationFrame(animateStars);
-    }
-    animateStars();
+        startScreen.addEventListener("click", handleStart);
+        startScreen.addEventListener("touchend", (e) => {
+            e.preventDefault();
+            handleStart(e);
+        });
 
-    // クリーンアップ用
-    startScreen._cleanupStars = function() {
-        if (startAnimId) cancelAnimationFrame(startAnimId);
-        window.removeEventListener("resize", resizeStarCanvas);
-    };
+        let startAnimId = null;
+        function animateStars() {
+            // 残像効果
+            const trailAlpha = startTriggered ? 0.3 : 1.0;
+            sCtx.fillStyle = `rgba(3, 5, 15, ${trailAlpha})`;
+            sCtx.fillRect(0, 0, starCanvas.width, starCanvas.height);
+
+            const t = performance.now() * 0.001;
+
+            // 平常時の星空描画
+            for (const s of stars) {
+                s.y -= s.speed;
+                if (s.y < -5) {
+                    s.y = starCanvas.height + 5;
+                    s.x = Math.random() * starCanvas.width;
+                }
+                const twinkle = Math.sin(t * s.twinkleSpeed * 60 + s.twinklePhase) * 0.3 + 0.7;
+                const a = s.alpha * twinkle;
+                const blue = Math.floor(200 + s.size * 20);
+                sCtx.fillStyle = `rgba(${180 + Math.floor(s.size * 30)}, ${200 + Math.floor(s.size * 20)}, ${blue}, ${a})`;
+                sCtx.beginPath();
+                sCtx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+                sCtx.fill();
+                if (s.size > 1.5) {
+                    sCtx.fillStyle = `rgba(0, 240, 255, ${a * 0.15})`;
+                    sCtx.beginPath();
+                    sCtx.arc(s.x, s.y, s.size * 3, 0, Math.PI * 2);
+                    sCtx.fill();
+                }
+            }
+
+            startAnimId = requestAnimationFrame(animateStars);
+        }
+        animateStars();
+
+        // クリーンアップ用
+        startScreen._cleanupStars = function () {
+            if (startAnimId) cancelAnimationFrame(startAnimId);
+            window.removeEventListener("resize", resizeStarCanvas);
+        };
     } // End of if (starCanvas)
 
     // ===============================================
@@ -6695,16 +6695,16 @@ function setupLayoutEditor() {
             function showPopup(e, x, y) {
                 if (!sizePopup || !box) return;
                 selectBox(box);
-                
+
                 sizePopup.style.transition = 'none';
                 sizePopup.style.opacity = '0';
                 sizePopup.style.transform = 'scale(0.9)';
                 sizePopup.style.display = 'flex';
-                
+
                 // Clamp position
                 let px = x;
                 let py = y + 20;
-                
+
                 // Need a frame to get offsetWidth correctly
                 requestAnimationFrame(() => {
                     if (px + sizePopup.offsetWidth > window.innerWidth) px = window.innerWidth - sizePopup.offsetWidth - 10;
@@ -6713,7 +6713,7 @@ function setupLayoutEditor() {
                     py = Math.max(10, py);
                     sizePopup.style.left = px + 'px';
                     sizePopup.style.top = py + 'px';
-                    
+
                     requestAnimationFrame(() => {
                         sizePopup.style.transition = 'opacity 0.2s ease, transform 0.2s cubic-bezier(0.18, 0.89, 0.32, 1.28)';
                         sizePopup.style.opacity = '1';
@@ -6730,10 +6730,10 @@ function setupLayoutEditor() {
             function onPointerDown(e) {
                 // Ignore right click for drag
                 if (e.button === 2) return;
-                
+
                 e.preventDefault();
                 e.stopPropagation();
-                
+
                 // Close popup initially to reset
                 if (sizePopup && sizePopup.style.display !== 'none' && !sizePopup.contains(e.target)) {
                     closePopup();
@@ -6746,7 +6746,7 @@ function setupLayoutEditor() {
                 offsetY = e.clientY - rect.top - rect.height / 2;
                 box.setPointerCapture(e.pointerId);
                 box.style.cursor = 'grabbing';
-                
+
                 // Long press logic for mobile
                 if (e.pointerType === 'touch') {
                     longPressTimer = setTimeout(() => {
@@ -6762,16 +6762,16 @@ function setupLayoutEditor() {
             function onPointerMove(e) {
                 if (!isDragging) return;
                 e.preventDefault();
-                
+
                 // Drag start - close popup
                 if (sizePopup && sizePopup.style.display !== 'none') closePopup();
-                
+
                 // If moved too much, cancel long press
                 if (longPressTimer && (Math.abs(e.movementX) > 3 || Math.abs(e.movementY) > 3)) {
                     clearTimeout(longPressTimer);
                     longPressTimer = null;
                 }
-                
+
                 let nx = e.clientX - offsetX;
                 let ny = e.clientY - offsetY;
                 let pctX = nx / window.innerWidth * 100;
