@@ -1206,7 +1206,7 @@ let keys = {};
 let mouse = { x: 0, y: 0, movementX: 0, movementY: 0, down: false };
 let bindingAction = null;
 
-const GAME_VERSION = "1.3.3";
+const GAME_VERSION = "1.3.6";
 let running = false,
     showHelp = false;
 let isPaused = false;
@@ -6912,8 +6912,8 @@ function initFirebaseAuthUI() {
         return;
     }
     const { 
-        signInAnonymously, onAuthStateChanged, signInWithEmailAndPassword, 
-        signOut, linkWithCredential, EmailAuthProvider 
+        signInAnonymously, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
+        signOut, linkWithCredential, EmailAuthProvider
     } = window.firebaseAuthUI;
     const auth = window.firebaseAuth;
     
@@ -6950,6 +6950,7 @@ function initFirebaseAuthUI() {
             if (btnStartLogin) {
                 btnStartLogin.innerText = "LOGIN";
                 btnStartLogin.classList.remove("logged-in");
+                btnStartLogin.style.display = "block";
             }
             return;
         }
@@ -6965,6 +6966,7 @@ function initFirebaseAuthUI() {
             if (btnStartLogin) {
                 btnStartLogin.innerText = "LOGIN";
                 btnStartLogin.classList.remove("logged-in");
+                btnStartLogin.style.display = "block";
             }
         } else {
             if (accountStatusText) {
@@ -6977,6 +6979,7 @@ function initFirebaseAuthUI() {
             if (btnStartLogin) {
                 btnStartLogin.innerText = "LINKED ✓";
                 btnStartLogin.classList.add("logged-in");
+                btnStartLogin.style.display = "none";
             }
         }
     }
@@ -6997,12 +7000,17 @@ function initFirebaseAuthUI() {
         authErrorMsg.innerText = "";
         authEmailInput.value = "";
         authPasswordInput.value = "";
-        // モードセレクトが開いていたら隠す
-        const msm = document.getElementById("modeSelectModal");
-        if (msm && msm.style.display !== "none") {
-            msm.dataset.wasOpen = "true";
-            msm.style.display = "none";
-        }
+        
+        // 他の画面が開いていたら一時的に隠す
+        const viewsToHide = ["modeSelectModal", "pauseSettingsMenu", "startScreen"];
+        viewsToHide.forEach(id => {
+            const el = document.getElementById(id);
+            if (el && el.style.display !== "none") {
+                el.dataset.hiddenByAuth = "true";
+                el.style.display = "none";
+            }
+        });
+
         authModal.style.display = "block";
     };
 
@@ -7027,12 +7035,16 @@ function initFirebaseAuthUI() {
 
     function hideAuthModal() {
         authModal.style.display = "none";
-        // モードセレクトを元に戻す
-        const msm = document.getElementById("modeSelectModal");
-        if (msm && msm.dataset.wasOpen === "true") {
-            msm.style.display = "block";
-            delete msm.dataset.wasOpen;
-        }
+        
+        // 隠していた画面を元に戻す
+        const viewsToHide = ["modeSelectModal", "pauseSettingsMenu", "startScreen"];
+        viewsToHide.forEach(id => {
+            const el = document.getElementById(id);
+            if (el && el.dataset.hiddenByAuth === "true") {
+                el.style.display = id === "startScreen" ? "flex" : "block";
+                delete el.dataset.hiddenByAuth;
+            }
+        });
     }
 
     btnCancelAuth.addEventListener("click", () => {
@@ -7061,8 +7073,13 @@ function initFirebaseAuthUI() {
 
                 // Step 1: まず匿名アカウントにリンクを試みる（＝新規登録）
                 try {
-                    const cred = EmailAuthProvider.credential(email, pwd);
-                    await linkWithCredential(auth.currentUser, cred);
+                    const result = await createUserWithEmailAndPassword(auth, email, pwd);
+                    const newUid = result.user.uid;
+                    // 新規登録に成功した場合、以前のゲストデータがあれば手動で引き継ぐ
+                    if (localData && localData.score > 0) {
+                        localData.uid = oldUidForPushing;
+                        await window.updatePersonalDataAfterConflict(localData, newUid);
+                    }
                     hideAuthModal();
                     await window.gameAlert("アカウントを新規登録して連携しました！\nデータが安全にバックアップされています。", "LINKED");
                     updateAccountUI(auth.currentUser);
