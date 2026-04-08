@@ -1,0 +1,16 @@
+{
+	"name": "astro-fray",
+	"main": "src/index.js",
+	"compatibility_date": "2024-09-23",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"env": {
+		"dev": {
+			"name": "astro-fray-dev"
+		},
+		"prod": {
+			"name": "astro-fray-prod"
+		}
+	}
+}
