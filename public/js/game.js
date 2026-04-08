@@ -1206,7 +1206,7 @@ let keys = {};
 let mouse = { x: 0, y: 0, movementX: 0, movementY: 0, down: false };
 let bindingAction = null;
 
-const GAME_VERSION = "1.4.0";
+const GAME_VERSION = "1.4.2";
 let running = false,
     showHelp = false;
 let isPaused = false;
@@ -5910,11 +5910,31 @@ saveNicknameBtn?.addEventListener("click", async () => {
         saveNicknameBtn.disabled = true;
         saveNicknameBtn.innerText = "確認中...";
         try {
+            const isAnon = window.firebaseAuth && window.firebaseAuth.currentUser && window.firebaseAuth.currentUser.isAnonymous;
             const currentUid = window.firebaseAuth && window.firebaseAuth.currentUser ? window.firebaseAuth.currentUser.uid : null;
             if (window.checkNicknameUnique) {
-                const unique = await window.checkNicknameUnique(name, currentUid);
-                if (!unique) {
-                    window.gameAlert("このコールサインは既に使用されています。\n別の名前を入力してください。", "NAME ERROR");
+                const result = await window.checkNicknameUnique(name, currentUid);
+                if (!result.unique) {
+                    const errContainer = document.getElementById("nicknameErrorContainer");
+                    const errMsg = document.getElementById("nicknameErrorMessage");
+                    const loginBtn = document.getElementById("nicknameLoginBtn");
+                    
+                    if (isAnon && !result.ownerIsAnonymous) {
+                        errMsg.style.color = "#ffaa00"; 
+                        errMsg.style.textShadow = "0 0 5px rgba(255,170,0,0.5)";
+                        errMsg.innerText = "このコールサインは登録済みです。\nあなたのデータですか？";
+                        loginBtn.style.display = "inline-block";
+                    } else {
+                        errMsg.style.color = "#ff0055"; 
+                        errMsg.style.textShadow = "0 0 5px rgba(255,0,85,0.5)";
+                        errMsg.innerText = "既に使用されています。\n別の名前を入力してください。";
+                        loginBtn.style.display = "none";
+                    }
+
+                    if (errContainer) {
+                        errContainer.style.maxHeight = "100px";
+                        errContainer.style.opacity = "1";
+                    }
                     saveNicknameBtn.disabled = false;
                     saveNicknameBtn.innerText = "システム起動";
                     return;
@@ -5940,6 +5960,20 @@ nicknameInput?.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
         e.preventDefault();
         saveNicknameBtn.click();
+    }
+});
+nicknameInput?.addEventListener("input", () => {
+    const errContainer = document.getElementById("nicknameErrorContainer");
+    if (errContainer && errContainer.style.opacity !== "0") {
+        errContainer.style.maxHeight = "0";
+        errContainer.style.opacity = "0";
+    }
+});
+const nicknameLoginBtn = document.getElementById("nicknameLoginBtn");
+nicknameLoginBtn?.addEventListener("click", () => {
+    nicknameModal.style.display = "none";
+    if (window.openAuthModal) {
+        window.openAuthModal();
     }
 });
 closeRankingBtn?.addEventListener("click", () => {
@@ -6923,7 +6957,7 @@ function initFirebaseAuthUI() {
     const accountStatusText = document.getElementById("accountStatusText");
     const btnOpenAuthFromSettings = document.getElementById("btnOpenAuthFromSettings");
     const btnSignOutButton = document.getElementById("btnSignOutButton");
-    const btnStartLogin = document.getElementById("btnStartLogin");
+
 
     // Auth Modal Elements
     const authModal = document.getElementById("authModal");
@@ -6939,6 +6973,18 @@ function initFirebaseAuthUI() {
     const btnCancelConflict = document.getElementById("btnCancelConflict");
     let selectedConflictChoice = null;
 
+    // 古い匿名アカウントのクリーンアップ（Firebase Authから匿名ユーザーを削除）
+    // ※ Firestoreの旧ランキングデータは名前ベースの重複排除で表示上は問題ないため残す
+    async function cleanupOldAnonymousAccount(oldUser) {
+        if (!oldUser) return;
+        try {
+            await oldUser.delete();
+        } catch(e) {
+            // ログイン切替後はトークン失効で失敗する可能性がある（管理者側で定期クリーンアップ推奨）
+            console.warn("Could not delete old anonymous user:", e);
+        }
+    }
+
     function updateAccountUI(user) {
         if (!user) {
             if (accountStatusText) {
@@ -6947,11 +6993,7 @@ function initFirebaseAuthUI() {
             }
             if (btnOpenAuthFromSettings) btnOpenAuthFromSettings.style.display = "block";
             if (btnSignOutButton) btnSignOutButton.style.display = "none";
-            if (btnStartLogin) {
-                btnStartLogin.innerText = "LOGIN";
-                btnStartLogin.classList.remove("logged-in");
-                btnStartLogin.style.display = "block";
-            }
+
             return;
         }
         isGuest = user.isAnonymous;
@@ -6963,11 +7005,7 @@ function initFirebaseAuthUI() {
             }
             if (btnOpenAuthFromSettings) btnOpenAuthFromSettings.style.display = "block";
             if (btnSignOutButton) btnSignOutButton.style.display = "none";
-            if (btnStartLogin) {
-                btnStartLogin.innerText = "LOGIN";
-                btnStartLogin.classList.remove("logged-in");
-                btnStartLogin.style.display = "block";
-            }
+
         } else {
             if (accountStatusText) {
                 accountStatusText.innerText = `LINKED (${user.email})`;
@@ -6976,11 +7014,7 @@ function initFirebaseAuthUI() {
             }
             if (btnOpenAuthFromSettings) btnOpenAuthFromSettings.style.display = "none";
             if (btnSignOutButton) btnSignOutButton.style.display = "block";
-            if (btnStartLogin) {
-                btnStartLogin.innerText = "LINKED ✓";
-                btnStartLogin.classList.add("logged-in");
-                btnStartLogin.style.display = "none";
-            }
+
         }
     }
 
@@ -7014,10 +7048,7 @@ function initFirebaseAuthUI() {
         authModal.style.display = "block";
     };
 
-    btnStartLogin?.addEventListener("click", (e) => {
-        e.stopPropagation(); // スタート画面のクリック伝播を防止
-        window.openAuthModal();
-    });
+
     btnOpenAuthFromSettings?.addEventListener("click", () => {
         window.openAuthModal();
     });
@@ -7064,29 +7095,52 @@ function initFirebaseAuthUI() {
 
         let localData = null;
         let oldUidForPushing = null;
+        let oldAnonymousUser = null;
 
         try {
-            // ===== 統合フロー: まずリンク → 失敗したらログイン =====
+            // ===== 統合フロー: まず linkWithCredential → 失敗したらログイン =====
             if (auth.currentUser && auth.currentUser.isAnonymous) {
+                oldAnonymousUser = auth.currentUser;
                 oldUidForPushing = auth.currentUser.uid;
                 localData = await window.getPersonalHighScoreAndData(oldUidForPushing, "normal");
 
-                // Step 1: まず匿名アカウントにリンクを試みる（＝新規登録）
+                // Step 1: linkWithCredential で匿名アカウントにメール/パスワードを紐付ける
+                // UIDが変わらないため、データ移行不要・孤児アカウントも発生しない
                 try {
-                    const result = await createUserWithEmailAndPassword(auth, email, pwd);
-                    const newUid = result.user.uid;
-                    // 新規登録に成功した場合、以前のゲストデータがあれば手動で引き継ぐ
-                    if (localData && localData.score > 0) {
-                        localData.uid = oldUidForPushing;
-                        await window.updatePersonalDataAfterConflict(localData, newUid);
-                    }
+                    const credential = EmailAuthProvider.credential(email, pwd);
+                    const result = await linkWithCredential(auth.currentUser, credential);
+                    // リンク成功: 匿名アカウントがそのままメールアカウントに昇格
                     hideAuthModal();
-                    await window.gameAlert("アカウントを新規登録して連携しました！\nデータが安全にバックアップされています。", "LINKED");
+                    await window.gameAlert("アカウントを連携しました！\nデータが安全にバックアップされています。", "LINKED");
                     updateAccountUI(auth.currentUser);
                     btnSubmitAuth.disabled = false;
                     return;
                 } catch (linkErr) {
-                    if (linkErr.code !== 'auth/email-already-in-use') {
+                    if (linkErr.code === 'auth/operation-not-allowed') {
+                        // Firebaseの「verify the new email before changing email」制約等でリンク処理がブロックされた場合、
+                        // 新規作成(Signup)として扱い、安全にデータ移行を行う
+                        try {
+                            const createResult = await createUserWithEmailAndPassword(auth, email, pwd);
+                            const newUid = createResult.user.uid;
+                            if (localData && localData.score > 0) {
+                                localData.uid = oldUidForPushing;
+                                await window.updatePersonalDataAfterConflict(localData, newUid);
+                            }
+                            await cleanupOldAnonymousAccount(oldAnonymousUser);
+                            hideAuthModal();
+                            await window.gameAlert("アカウントを作成し、データを引き継ぎました！\nデータが安全にバックアップされています。", "SIGNUP SUCCESS");
+                            updateAccountUI(auth.currentUser);
+                            btnSubmitAuth.disabled = false;
+                            return;
+                        } catch (createErr) {
+                            if (createErr.code === 'auth/email-already-in-use') {
+                                // アカウントが既に存在する場合は以降のSignInフローへ進ませる
+                            } else {
+                                throw createErr;
+                            }
+                        }
+                    } else if (linkErr.code !== 'auth/email-already-in-use' &&
+                        linkErr.code !== 'auth/credential-already-in-use') {
                         throw linkErr; // 予期しないエラーは上位へ
                     }
                     // メール既存 → ログインフローへ
@@ -7103,12 +7157,14 @@ function initFirebaseAuthUI() {
             // データ競合チェック
             if (localData && cloudData && localData.score > 0) {
                 localData.uid = oldUidForPushing;
-                showConflictModal(localData, cloudData, newUid);
+                showConflictModal(localData, cloudData, newUid, oldAnonymousUser);
             } else if (localData && localData.score > 0 && !cloudData) {
                 localData.uid = oldUidForPushing;
                 await window.updatePersonalDataAfterConflict(localData, newUid);
+                await cleanupOldAnonymousAccount(oldAnonymousUser);
                 await window.gameAlert("ログインしました。\nプレイデータをクラウドに同期しました。", "LOGIN SUCCESS");
             } else {
+                await cleanupOldAnonymousAccount(oldAnonymousUser);
                 await window.gameAlert("ログインしました！\nデータが引き継がれました。", "LOGIN SUCCESS");
             }
         } catch (e) {
@@ -7120,6 +7176,7 @@ function initFirebaseAuthUI() {
             if (e.code === 'auth/user-not-found') msg = "このメールアドレスは登録されていません。";
             if (e.code === 'auth/invalid-email') msg = "メールアドレスの形式が正しくありません。";
             if (e.code === 'auth/too-many-requests') msg = "試行回数が多すぎます。しばらくお待ちください。";
+            if (e.code === 'auth/requires-recent-login') msg = "セッションが古くなっています。ページを更新してから再度お試しください。";
             authErrorMsg.innerText = msg;
         }
         btnSubmitAuth.disabled = false;
@@ -7140,7 +7197,7 @@ function initFirebaseAuthUI() {
         });
     });
 
-    function showConflictModal(local, cloud, newUid) {
+    function showConflictModal(local, cloud, newUid, oldAnonymousUser) {
         selectedConflictChoice = null;
         btnConfirmConflict.disabled = true;
         conflictCards.forEach(c => {
@@ -7164,18 +7221,22 @@ function initFirebaseAuthUI() {
             } else {
                 await window.gameAlert("クラウドのデータを引き継ぎました！", "DATA SYNCED");
             }
+            // 古い匿名アカウントをクリーンアップ
+            await cleanupOldAnonymousAccount(oldAnonymousUser);
             dataConflictModal.style.display = "none";
             btnConfirmConflict.innerText = "選択したデータで引き継ぐ";
             window.location.reload();
         };
 
+        // キャンセル時も古い匿名アカウントをクリーンアップ
+        btnCancelConflict.onclick = async () => {
+            dataConflictModal.style.display = "none";
+            await cleanupOldAnonymousAccount(oldAnonymousUser);
+            await window.gameAlert("クラウドのデータを引き継ぎました。", "DATA SYNCED");
+            window.location.reload();
+        };
+
         dataConflictModal.style.display = "block";
     }
-
-    btnCancelConflict.addEventListener('click', async () => {
-        dataConflictModal.style.display = "none";
-        await window.gameAlert("クラウドのデータを引き継ぎました。", "DATA SYNCED");
-        window.location.reload();
-    });
 }
 initFirebaseAuthUI();

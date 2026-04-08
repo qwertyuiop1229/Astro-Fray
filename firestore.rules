@@ -2,51 +2,56 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ===== ランキング =====
-    // rankings, rankings_easy, rankings_hard コレクション共通ルール
+    // ===== ランキング用の共通バリデーション =====
+    // 書き込みデータの整合性チェック（認証済み＋自分のUID＋スコア上限）
+    function isValidRankingWrite() {
+      let d = request.resource.data;
+      return request.auth != null
+          && d.uid == request.auth.uid
+          && d.score is number
+          && d.score >= 0
+          && d.playTimeSeconds is number
+          && d.playTimeSeconds >= 0
+          && d.playTimeSeconds <= 10800
+          && d.score <= d.playTimeSeconds * 300
+          && d.name is string
+          && d.name.size() <= 12;
+    }
+
+    // 自分のドキュメントか（UID一致）、またはレガシーデータ（UIDフィールド未設定）
+    function isOwnerOrLegacy() {
+      return resource.data.uid == request.auth.uid
+          || !('uid' in resource.data);
+    }
+
+    // rankings, rankings_easy, rankings_hard 共通ルール
     match /rankings/{docId} {
       allow read: if true;
-      allow create, update: if request.resource.data.score is number
-                            && request.resource.data.score >= 0
-                            && request.resource.data.playTimeSeconds is number
-                            && request.resource.data.playTimeSeconds >= 0
-                            && request.resource.data.playTimeSeconds <= 10800
-                            && request.resource.data.score <= request.resource.data.playTimeSeconds * 300
-                            && request.resource.data.name is string
-                            && request.resource.data.name.size() <= 12;
-      allow delete: if false;
+      allow create: if isValidRankingWrite();
+      allow update: if isValidRankingWrite() && isOwnerOrLegacy();
+      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
     }
     match /rankings_easy/{docId} {
       allow read: if true;
-      allow create, update: if request.resource.data.score is number
-                            && request.resource.data.score >= 0
-                            && request.resource.data.playTimeSeconds is number
-                            && request.resource.data.playTimeSeconds >= 0
-                            && request.resource.data.playTimeSeconds <= 10800
-                            && request.resource.data.score <= request.resource.data.playTimeSeconds * 300
-                            && request.resource.data.name is string
-                            && request.resource.data.name.size() <= 12;
-      allow delete: if false;
+      allow create: if isValidRankingWrite();
+      allow update: if isValidRankingWrite() && isOwnerOrLegacy();
+      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
     }
     match /rankings_hard/{docId} {
       allow read: if true;
-      allow create, update: if request.resource.data.score is number
-                            && request.resource.data.score >= 0
-                            && request.resource.data.playTimeSeconds is number
-                            && request.resource.data.playTimeSeconds >= 0
-                            && request.resource.data.playTimeSeconds <= 10800
-                            && request.resource.data.score <= request.resource.data.playTimeSeconds * 300
-                            && request.resource.data.name is string
-                            && request.resource.data.name.size() <= 12;
-      allow delete: if false;
+      allow create: if isValidRankingWrite();
+      allow update: if isValidRankingWrite() && isOwnerOrLegacy();
+      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
     }
 
-    // ===== マッチルーム =====
+    // ===== マッチルーム（認証必須） =====
     match /match_rooms/{docId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth != null;
     }
 
-    // デフォルト: それ以外のコレクションは拒否
+    // デフォルト: それ以外のコレクションは全て拒否
     match /{document=**} {
       allow read, write: if false;
     }
