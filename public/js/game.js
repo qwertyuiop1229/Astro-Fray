@@ -1254,7 +1254,7 @@ let keys = {};
 let mouse = { x: 0, y: 0, movementX: 0, movementY: 0, down: false };
 let bindingAction = null;
 
-const GAME_VERSION = "1.4.23";
+const GAME_VERSION = "1.5.0";
 let running = false,
     showHelp = false;
 let isPaused = false;
