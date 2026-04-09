@@ -2481,25 +2481,58 @@
             }
             return null;
         }
-        async function _verifySignature(score, playTime, signature) {
-            const raw = score + "_" + playTime + "_AstroFraySuperSecretKey";
-            const msgBuffer = new TextEncoder().encode(raw);
-            const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-            const hashArray = Array.from(new Uint8Array(hashBuffer));
-            const expected = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-            return signature === expected;
+        // Workers API のベースURL取得（game.jsからも使えるようwindowに公開）
+        function _getWorkerBaseUrl() {
+            const isProd = firebaseConfig.projectId === "astro-fray";
+            return isProd
+                ? "https://astro-fray-prod.astro-fray-server.workers.dev"
+                : "https://astro-fray-dev.astro-fray-server.workers.dev";
         }
+        window._getWorkerBaseUrl = _getWorkerBaseUrl;
 
-        async function submitScoreToServer(rawScore, difficulty, playTimeSeconds, signature) {
-            // シグネチャの検証（デプロイ先が本番環境 'astro-fray' の場合のみ強制適用）
-            if (firebaseConfig.projectId === "astro-fray") {
-                const isValid = await _verifySignature(rawScore, playTimeSeconds, signature);
-                if (!isValid) {
-                    console.error("Signature verification failed.");
-                    return { ok: false, reason: 'permission-denied' };
+        async function submitScoreToServer(rawScore, difficulty, playTimeSeconds, sessionToken) {
+            const finalScore = normalizeToNumber(rawScore) || 0;
+            const name = localStorage.getItem("playerNickname_v1") || "UNKNOWN";
+            const currentUid = auth.currentUser ? auth.currentUser.uid : null;
+
+            if (!currentUid) {
+                return { ok: false, reason: 'unauthenticated' };
+            }
+
+            // サーバーサイド検証: Workers API にセッショントークンと一緒にスコアを送信
+            if (sessionToken) {
+                try {
+                    const idToken = await auth.currentUser.getIdToken(true);
+                    const resp = await fetch(_getWorkerBaseUrl() + '/api/submit-score', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Bearer ' + idToken
+                        },
+                        body: JSON.stringify({
+                            sessionToken: sessionToken,
+                            score: finalScore,
+                            name: name
+                        })
+                    });
+                    const result = await resp.json();
+                    if (result.success) {
+                        return { ok: true };
+                    }
+                    // チート検出系のエラー
+                    if (resp.status === 403) {
+                        console.warn('Score rejected by server:', result.error);
+                        return { ok: false, reason: 'cheat-detected' };
+                    }
+                    // その他のエラー → フォールバック
+                    console.warn('Server score submit failed, falling back to direct write:', result.error);
+                } catch (e) {
+                    console.warn('Workers API error, falling back to direct write:', e);
                 }
             }
 
+            // フォールバック: セッショントークンがない場合やサーバーエラー時は
+            // 従来のクライアント直接書き込み（Firestoreルールで保護）
             const diff = difficulty || window.currentDifficulty || "normal";
             const colName =
                 diff === "easy"
@@ -2507,29 +2540,20 @@
                     : diff === "hard"
                         ? "rankings_hard"
                         : "rankings";
-            const finalScore = normalizeToNumber(rawScore) || 0;
             const pTime = normalizeToNumber(playTimeSeconds) || 0;
-            const name = localStorage.getItem("playerNickname_v1") || "UNKNOWN";
-            const currentUid = auth.currentUser ? auth.currentUser.uid : null;
-            
-            if (!currentUid) {
-                return { ok: false, reason: 'unauthenticated' };
-            }
 
             const colRef = collection(db, colName);
-            // 優先して UID でクエリ。もし UID で無ければ、フォールバックで name (過去の互換性)
             let q = query(colRef, where("uid", "==", currentUid), limit(1));
             
             try {
                 let querySnapshot = await getDocs(q);
                 if (querySnapshot.empty) {
-                    // もし UID が無ければ Name でも探す（古い仕様への互換性）
                     q = query(colRef, where("name", "==", name), limit(1));
                     querySnapshot = await getDocs(q);
                 }
 
                 if (querySnapshot.empty) {
-                    const docRef = await addDoc(colRef, {
+                    await addDoc(colRef, {
                         name,
                         score: finalScore,
                         playTimeSeconds: pTime,
@@ -2538,32 +2562,25 @@
                         uid: currentUid,
                         isAnonymous: auth.currentUser ? auth.currentUser.isAnonymous : true
                     });
-                    return { ok: true };
                 } else {
                     const existingDoc = querySnapshot.docs[0];
                     const existingScore = existingDoc.data().score || 0;
-                    // 同一 UID もしくは同一 Name の場合、名前の更新とスコアの更新を行う
                     if (finalScore > existingScore) {
                         await updateDoc(doc(db, colName, existingDoc.id), {
-                            name: name, // 最新の名前に上書き
-                            score: finalScore,
-                            playTimeSeconds: pTime,
-                            uid: currentUid, // UIDも更新
+                            name, score: finalScore, playTimeSeconds: pTime,
+                            uid: currentUid,
                             isAnonymous: auth.currentUser ? auth.currentUser.isAnonymous : true
                         });
-                        return { ok: true };
                     } else {
-                        // スコアが低くても、名前やUIDは同期させておく
                         await updateDoc(doc(db, colName, existingDoc.id), {
-                            name: name,
-                            uid: currentUid,
+                            name, uid: currentUid,
                             score: existingDoc.data().score || 0,
                             playTimeSeconds: existingDoc.data().playTimeSeconds || 0,
                             isAnonymous: auth.currentUser ? auth.currentUser.isAnonymous : true
                         });
-                        return { ok: true };
                     }
                 }
+                return { ok: true };
             } catch (err) {
                 console.error("Score Submit Error:", err);
                 return { ok: false, reason: err.code };

@@ -274,6 +274,70 @@ function decodeAndVerifyIdToken(token) {
 }
 
 // ========================================================
+// セッショントークン（HMAC署名付き）& チート対策
+// ========================================================
+let hmacKey = null;
+
+async function getHmacKey(serviceAccount) {
+	if (hmacKey) return hmacKey;
+	// サービスアカウントの秘密鍵の一部からHMAC用キーを導出
+	const secret = serviceAccount.private_key_id + ':' + serviceAccount.client_email;
+	const keyData = new TextEncoder().encode(secret);
+	hmacKey = await crypto.subtle.importKey(
+		'raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']
+	);
+	return hmacKey;
+}
+
+async function createSessionToken(key, uid, difficulty) {
+	const nonce = crypto.randomUUID();
+	const startTime = Date.now();
+	const payload = JSON.stringify({ uid, startTime, nonce, difficulty });
+	const payloadB64 = base64urlEncode(payload);
+	const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payloadB64));
+	const sigB64 = base64urlEncode(sig);
+	return payloadB64 + '.' + sigB64;
+}
+
+async function verifySessionToken(key, token) {
+	const dotIdx = token.indexOf('.');
+	if (dotIdx < 0) throw new Error('Invalid session token format');
+	const payloadB64 = token.substring(0, dotIdx);
+	const sigB64 = token.substring(dotIdx + 1);
+	// 署名を復元
+	const sigStr = atob(sigB64.replace(/-/g, '+').replace(/_/g, '/'));
+	const sigBytes = Uint8Array.from(sigStr, c => c.charCodeAt(0));
+	const valid = await crypto.subtle.verify('HMAC', key, sigBytes, new TextEncoder().encode(payloadB64));
+	if (!valid) throw new Error('Invalid session token signature');
+	const payloadStr = atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/'));
+	return JSON.parse(payloadStr);
+}
+
+// 使用済みnonce短期キャッシュ（リプレイ攻撃防止）
+// Workerの再起動でリセットされるが、時間チェックがフォールバック
+const usedNonces = new Map();
+const NONCE_TTL_MS = 4 * 60 * 60 * 1000; // 4時間
+
+function markNonceUsed(nonce) {
+	usedNonces.set(nonce, Date.now());
+	// 古いエントリを掃除
+	if (usedNonces.size > 10000) {
+		const cutoff = Date.now() - NONCE_TTL_MS;
+		for (const [k, v] of usedNonces) {
+			if (v < cutoff) usedNonces.delete(k);
+		}
+	}
+}
+
+function isNonceUsed(nonce) {
+	return usedNonces.has(nonce);
+}
+
+// スコア制限定数
+const MAX_SCORE_PER_SECOND = 300;
+const MAX_PLAY_TIME_SECONDS = 10800; // 3時間
+
+// ========================================================
 // メインハンドラ
 // ========================================================
 export default {
@@ -518,6 +582,142 @@ export default {
 				return new Response(JSON.stringify({ success: true, migrated: migrateAction === 'local' }), {
 					status: 200, headers: jsonHeaders
 				});
+			}
+
+			// ==========================================
+			// API 3: ゲームセッション開始
+			// ==========================================
+			if (url.pathname === '/api/start-session') {
+				const difficulty = body.difficulty || 'normal';
+				const key = await getHmacKey(serviceAccount);
+				const sessionToken = await createSessionToken(key, callerUid, difficulty);
+				return new Response(JSON.stringify({
+					success: true,
+					sessionToken
+				}), { status: 200, headers: jsonHeaders });
+			}
+
+			// ==========================================
+			// API 4: スコア送信（サーバーサイド検証）
+			// ==========================================
+			if (url.pathname === '/api/submit-score') {
+				const { sessionToken, score, name } = body;
+
+				if (!sessionToken || score === undefined || score === null) {
+					return new Response(JSON.stringify({ success: false, error: 'Missing params' }), {
+						status: 400, headers: jsonHeaders
+					});
+				}
+
+				// 1. セッショントークンのHMAC検証
+				let session;
+				try {
+					const key = await getHmacKey(serviceAccount);
+					session = await verifySessionToken(key, sessionToken);
+				} catch (e) {
+					return new Response(JSON.stringify({
+						success: false, error: 'Invalid session', details: e.message
+					}), { status: 403, headers: jsonHeaders });
+				}
+
+				// 2. セッションのUIDが呼び出し元と一致するか
+				if (session.uid !== callerUid) {
+					return new Response(JSON.stringify({
+						success: false, error: 'Session UID mismatch'
+					}), { status: 403, headers: jsonHeaders });
+				}
+
+				// 3. nonce再利用チェック（リプレイ攻撃防止）
+				if (isNonceUsed(session.nonce)) {
+					return new Response(JSON.stringify({
+						success: false, error: 'Session already used'
+					}), { status: 403, headers: jsonHeaders });
+				}
+
+				// 4. サーバー側経過時間の計算と検証
+				const elapsedMs = Date.now() - session.startTime;
+				const elapsedSeconds = elapsedMs / 1000;
+				const finalScore = Math.max(0, Math.floor(Number(score) || 0));
+				const finalName = (typeof name === 'string' && name.length > 0 && name.length <= 12)
+					? name : 'UNKNOWN';
+				const difficulty = session.difficulty || 'normal';
+
+				// 最低プレイ時間チェック（3秒未満でのスコア送信は拒否）
+				if (elapsedSeconds < 3 && finalScore > 0) {
+					return new Response(JSON.stringify({
+						success: false, error: 'Play time too short'
+					}), { status: 403, headers: jsonHeaders });
+				}
+
+				// 経過時間に上限を設定
+				const cappedSeconds = Math.min(elapsedSeconds, MAX_PLAY_TIME_SECONDS);
+
+				// スコア/時間の整合性チェック
+				const maxPossibleScore = cappedSeconds * MAX_SCORE_PER_SECOND;
+				if (finalScore > maxPossibleScore) {
+					console.warn('Suspicious score rejected:', finalScore, 'max:', maxPossibleScore, 'uid:', callerUid);
+					return new Response(JSON.stringify({
+						success: false, error: 'Score exceeds time limit'
+					}), { status: 403, headers: jsonHeaders });
+				}
+
+				// 5. nonceを使用済みにマーク
+				markNonceUsed(session.nonce);
+
+				// 6. Firestoreにスコア書き込み
+				const colName = difficulty === 'easy' ? 'rankings_easy'
+					: difficulty === 'hard' ? 'rankings_hard' : 'rankings';
+				const playTimeSeconds = Math.floor(cappedSeconds);
+
+				try {
+					// 既存ドキュメントを検索
+					const existingDocs = await queryByUid(accessToken, projectId, colName, callerUid);
+
+					if (existingDocs.length > 0) {
+						const existingData = fromFirestoreFields(existingDocs[0].fields);
+						const existingScore = existingData.score || 0;
+
+						if (finalScore > existingScore) {
+							// ハイスコア更新
+							await updateDocument(accessToken, existingDocs[0].name, {
+								name: finalName,
+								score: finalScore,
+								playTimeSeconds: playTimeSeconds,
+								uid: callerUid,
+								isAnonymous: false
+							});
+						} else {
+							// スコアは低いが名前は同期
+							await updateDocument(accessToken, existingDocs[0].name, {
+								name: finalName,
+								uid: callerUid,
+								score: existingScore,
+								playTimeSeconds: existingData.playTimeSeconds || 0,
+								isAnonymous: false
+							});
+						}
+					} else {
+						// 新規作成
+						await createDocument(accessToken, projectId, colName, {
+							name: finalName,
+							score: finalScore,
+							playTimeSeconds: playTimeSeconds,
+							difficulty: difficulty,
+							createdAt: 'SERVER_TIMESTAMP',
+							uid: callerUid,
+							isAnonymous: false
+						});
+					}
+
+					return new Response(JSON.stringify({ success: true }), {
+						status: 200, headers: jsonHeaders
+					});
+				} catch (e) {
+					console.error('Score write error:', e.message);
+					return new Response(JSON.stringify({
+						success: false, error: 'Failed to write score'
+					}), { status: 500, headers: jsonHeaders });
+				}
 			}
 
 			return new Response('API Not Found', { status: 404, headers: corsHeaders });

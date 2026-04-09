@@ -1214,7 +1214,7 @@ let keys = {};
 let mouse = { x: 0, y: 0, movementX: 0, movementY: 0, down: false };
 let bindingAction = null;
 
-const GAME_VERSION = "1.4.15";
+const GAME_VERSION = "1.4.17";
 let running = false,
     showHelp = false;
 let isPaused = false;
@@ -2807,6 +2807,8 @@ function initGame() {
         }, 20); // Increased sync rate to 50Hz
     }
     TimeManager.setStartTime(Date.now());
+    // サーバーサイドセッション開始（非同期、失敗してもゲームは開始する）
+    requestSessionToken(window.currentDifficulty || 'normal');
     running = true;
     updateTouchUIVisibility();
 }
@@ -3076,13 +3078,32 @@ const ScoreManager = (function () {
     };
 })();
 
-// 簡単なSHA-256風のハッシュ文字列を生成する関数（改ざん検知用）
-async function generateSignature(score, playTime) {
-    const raw = score + "_" + playTime + "_AstroFraySuperSecretKey";
-    const msgBuffer = new TextEncoder().encode(raw);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+// サーバーサイドセッション管理
+let _currentSessionToken = null;
+
+async function requestSessionToken(difficulty) {
+    if (!window.firebaseAuth || !window.firebaseAuth.currentUser) return null;
+    try {
+        const idToken = await window.firebaseAuth.currentUser.getIdToken(true);
+        const baseUrl = window._getWorkerBaseUrl ? window._getWorkerBaseUrl() : '';
+        if (!baseUrl) return null;
+        const resp = await fetch(baseUrl + '/api/start-session', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + idToken
+            },
+            body: JSON.stringify({ difficulty: difficulty || 'normal' })
+        });
+        const data = await resp.json();
+        if (data.success && data.sessionToken) {
+            _currentSessionToken = data.sessionToken;
+            return data.sessionToken;
+        }
+    } catch (e) {
+        console.warn('Session token request failed:', e);
+    }
+    return null;
 }
 
 // チート対策: プレイ開始時間のメモリ秘匿
@@ -3154,16 +3175,16 @@ async function handleGameOverSubmit() {
     message = `MISSION FAILED - スコア送信中...`;
     const diff = window.currentDifficulty || "normal";
     if (window.submitScoreToServer) {
-        // 署名を生成して一緒に送る
-        const signature = await generateSignature(currentScore, playTimeSeconds);
-        let res = await window.submitScoreToServer(currentScore, diff, playTimeSeconds, signature);
+        let res = await window.submitScoreToServer(currentScore, diff, playTimeSeconds, _currentSessionToken);
         if (res && !res.ok) {
-            if (res.reason === 'permission-denied') {
+            if (res.reason === 'permission-denied' || res.reason === 'cheat-detected') {
                 document.getElementById('cheatWarningModal').style.display = 'block';
             } else {
                 document.getElementById('networkErrorModal').style.display = 'block';
             }
         }
+        // セッショントークンを無効化（1回限り）
+        _currentSessionToken = null;
     }
     message = `MISSION FAILED - ランキング取得中...`;
     if (window.fetchTopRanks) {
@@ -6394,6 +6415,7 @@ function startTestPlay(settings) {
         : "(TEST: P=ポーズ/メニュー, R=戻る)";
 
     TimeManager.setStartTime(Date.now());
+    requestSessionToken(window.currentDifficulty || 'normal');
     running = true;
     updateTouchUIVisibility();
 }
