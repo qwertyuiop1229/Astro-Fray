@@ -27,6 +27,8 @@
             margin: 0;
             cursor: crosshair;
             overflow: hidden;
+            touch-action: manipulation;
+            -ms-touch-action: manipulation;
         }
 
         html,
@@ -2580,44 +2582,7 @@
             } catch(e) {}
             return null;
         };
-        
-        window.updatePersonalDataAfterConflict = async function(keepData, targetUid, diffs = ["easy", "normal", "hard"]) {
-            // keepData (Score, playTime) を targetUid の各難易度ドキュメントに強制上書きする。
-            for(let diff of diffs) {
-                const colName = diff === "easy" ? "rankings_easy" : diff === "hard" ? "rankings_hard" : "rankings";
-                try {
-                    const colRef = collection(db, colName);
-                    const qTarget = query(colRef, where("uid", "==", targetUid), limit(1));
-                    const snapTarget = await getDocs(qTarget);
-                    
-                    const qKeep = query(colRef, where("uid", "==", keepData.uid), limit(1));
-                    const snapKeep = await getDocs(qKeep);
-                    
-                    if (!snapKeep.empty) {
-                        const kd = snapKeep.docs[0].data();
-                        if (!snapTarget.empty) {
-                            await updateDoc(doc(db, colName, snapTarget.docs[0].id), {
-                                score: kd.score,
-                                playTimeSeconds: kd.playTimeSeconds,
-                                name: kd.name,
-                                uid: targetUid,
-                                isAnonymous: false
-                            });
-                        } else {
-                            await addDoc(colRef, {
-                                name: kd.name,
-                                score: kd.score,
-                                playTimeSeconds: kd.playTimeSeconds,
-                                difficulty: diff,
-                                createdAt: serverTimestamp(),
-                                uid: targetUid,
-                                isAnonymous: false
-                            });
-                        }
-                    }
-                } catch(e) {}
-            }
-        };
+
 
         window.checkNicknameUnique = async function(name, currentUid) {
             // Check cross all rankings if any other uid is using this name

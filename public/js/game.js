@@ -2,6 +2,14 @@
 window.addEventListener("contextmenu", (e) => {
     e.preventDefault();
 });
+// iOS Safari ピンチズーム防止（WebKit専用のgestureイベント）
+window.addEventListener("gesturestart", (e) => { e.preventDefault(); }, { passive: false });
+window.addEventListener("gesturechange", (e) => { e.preventDefault(); }, { passive: false });
+window.addEventListener("gestureend", (e) => { e.preventDefault(); }, { passive: false });
+// 全画面でのマルチタッチによるブラウザズーム防止（ゲーム内ピンチズームは game.js 内で別途処理）
+document.addEventListener("touchmove", (e) => {
+    if (e.touches.length > 1) { e.preventDefault(); }
+}, { passive: false });
 function isTyping() {
     const el = document.activeElement;
     return (
@@ -1206,7 +1214,7 @@ let keys = {};
 let mouse = { x: 0, y: 0, movementX: 0, movementY: 0, down: false };
 let bindingAction = null;
 
-const GAME_VERSION = "1.4.4";
+const GAME_VERSION = "1.4.15";
 let running = false,
     showHelp = false;
 let isPaused = false;
@@ -6958,7 +6966,6 @@ function initFirebaseAuthUI() {
     const btnOpenAuthFromSettings = document.getElementById("btnOpenAuthFromSettings");
     const btnSignOutButton = document.getElementById("btnSignOutButton");
 
-
     // Auth Modal Elements
     const authModal = document.getElementById("authModal");
     const authEmailInput = document.getElementById("authEmailInput");
@@ -6973,39 +6980,86 @@ function initFirebaseAuthUI() {
     const btnCancelConflict = document.getElementById("btnCancelConflict");
     let selectedConflictChoice = null;
 
-    // 古い匿名アカウントのクリーンアップ（Cloudflare Workers経由で安全に削除）
-    async function cleanupOldAnonymousAccount(oldUid) {
-        if (!oldUid) return;
-        try {
-            // 1. 現在のアカウントの認証用トークンを取得
-            const newIdToken = await window.firebaseAuth.currentUser.getIdToken();
+    // ======== ヘルパー: Workers API のベースURL ========
+    function getWorkerBaseUrl() {
+        const isProd = window.currentFirebaseProjectId === "astro-fray";
+        return isProd 
+            ? "https://astro-fray-prod.astro-fray-server.workers.dev" 
+            : "https://astro-fray-dev.astro-fray-server.workers.dev";
+    }
 
-            // 2. 環境（本番・テスト）に応じてリクエスト先URLを切り替え
-            const isProd = window.currentFirebaseProjectId === "astro-fray";
-            const baseUrl = isProd 
-                ? "https://astro-fray-prod.astro-fray-server.workers.dev/" 
-                : "https://astro-fray-dev.astro-fray-server.workers.dev/";
-            
-            // パスを指定してリクエスト
-            const workerUrl = baseUrl.replace(/\/$/, '') + "/api/cleanup-anonymous";
+    // ======== API 1: 古いデータの削除（Auth + Firestore） ========
+    // ログイン成功直後に即呼ばれる。データ移行は行わない。
+    async function deleteAnonymousAccount(oldUid, retryCount) {
+        if (!oldUid) return false;
+        const maxRetries = typeof retryCount === 'number' ? retryCount : 2;
 
-            // 3. Cloudflare WorkersのAPIへ削除リクエストを送信
-            const response = await fetch(workerUrl, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({ token: newIdToken, oldUid: oldUid })
-            });
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            try {
+                const currentUser = window.firebaseAuth.currentUser;
+                if (!currentUser) {
+                    console.error("deleteAnonymousAccount: No current user");
+                    return false;
+                }
+                const idToken = await currentUser.getIdToken(true); // 強制リフレッシュ
 
-            if (!response.ok) {
-                console.error("サーバーでのデータ削除に失敗しました:", await response.text());
-                return;
+                const response = await fetch(getWorkerBaseUrl() + "/api/delete-anonymous", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": "Bearer " + idToken
+                    },
+                    body: JSON.stringify({ oldUid: oldUid, token: idToken })
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    console.log("🗑️ 古いデータ " + oldUid + " を整理完了");
+                    return true;
+                }
+
+                console.error("データ整理失敗 (試行 " + (attempt + 1) + "/" + (maxRetries + 1) + "):", result.error, result.details || "");
+            } catch (e) {
+                console.error("データ整理エラー (試行 " + (attempt + 1) + "/" + (maxRetries + 1) + "):", e);
             }
 
-            console.log("🗑️ 古い匿名アカウントとFirestoreデータを安全に消去しました");
-        } catch(e) {
-            console.warn("Could not cleanup old anonymous user:", e);
+            // リトライの場合は少し待つ
+            if (attempt < maxRetries) {
+                await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+            }
+        }
+
+        return false;
+    }
+
+    // ======== API 2: データ移行のみ（コンフリクト選択後に呼ばれる） ========
+    async function migrateData(oldUid, migrateAction) {
+        if (!oldUid || !migrateAction) return false;
+        try {
+            const currentUser = window.firebaseAuth.currentUser;
+            if (!currentUser) return false;
+            const idToken = await currentUser.getIdToken(true);
+
+            const response = await fetch(getWorkerBaseUrl() + "/api/migrate-data", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": "Bearer " + idToken
+                },
+                body: JSON.stringify({ oldUid: oldUid, migrateAction: migrateAction, token: idToken })
+            });
+
+            const result = await response.json();
+            if (response.ok && result.success) {
+                console.log("✅ データ移行完了:", migrateAction);
+                return true;
+            }
+            console.error("データ移行失敗:", result.error || response.statusText);
+            return false;
+        } catch (e) {
+            console.error("データ移行エラー:", e);
+            return false;
         }
     }
 
@@ -7017,7 +7071,6 @@ function initFirebaseAuthUI() {
             }
             if (btnOpenAuthFromSettings) btnOpenAuthFromSettings.style.display = "block";
             if (btnSignOutButton) btnSignOutButton.style.display = "none";
-
             return;
         }
         isGuest = user.isAnonymous;
@@ -7029,16 +7082,14 @@ function initFirebaseAuthUI() {
             }
             if (btnOpenAuthFromSettings) btnOpenAuthFromSettings.style.display = "block";
             if (btnSignOutButton) btnSignOutButton.style.display = "none";
-
         } else {
             if (accountStatusText) {
-                accountStatusText.innerText = `LINKED (${user.email})`;
+                accountStatusText.innerText = "LINKED (" + user.email + ")";
                 accountStatusText.style.color = "#00f0ff";
                 accountStatusText.style.textShadow = "0 0 10px #00f0ff";
             }
             if (btnOpenAuthFromSettings) btnOpenAuthFromSettings.style.display = "none";
             if (btnSignOutButton) btnSignOutButton.style.display = "block";
-
         }
     }
 
@@ -7071,7 +7122,6 @@ function initFirebaseAuthUI() {
 
         authModal.style.display = "block";
     };
-
 
     btnOpenAuthFromSettings?.addEventListener("click", () => {
         window.openAuthModal();
@@ -7121,69 +7171,111 @@ function initFirebaseAuthUI() {
         let oldUidForPushing = null;
 
         try {
-            // ===== 統合フロー: まず linkWithCredential → 失敗したらログイン =====
+            // ===== 最適化フロー =====
+            // 既存アカウントログイン（最も多いケース）を先に試し、
+            // 不要なAPI呼び出しによる400エラーを回避する
             if (auth.currentUser && auth.currentUser.isAnonymous) {
                 oldUidForPushing = auth.currentUser.uid;
                 localData = await window.getPersonalHighScoreAndData(oldUidForPushing, "normal");
+            }
 
-                // Step 1: linkWithCredential で匿名アカウントにメール/パスワードを紐付ける
-                // UIDが変わらないため、データ移行不要・孤児アカウントも発生しない
+            // Step 1: まずサインインを試みる（既存アカウント向け）
+            let signInSucceeded = false;
+            try {
+                authErrorMsg.innerText = "ログイン中...";
+                const result = await signInWithEmailAndPassword(auth, email, pwd);
+                signInSucceeded = true;
+                const newUid = result.user.uid;
+
+                // ログイン成功 → 古いデータの整理
+                if (oldUidForPushing) {
+                    authErrorMsg.innerText = "ログイン完了。古いデータを整理中...";
+                    const deleteSuccess = await deleteAnonymousAccount(oldUidForPushing);
+                    if (!deleteSuccess) {
+                        await window.gameAlert(
+                            "古いデータの整理に失敗しました。\nゲームプレイには影響ありません。",
+                            "WARNING"
+                        );
+                    }
+                }
+
+                let cloudData = await window.getPersonalHighScoreAndData(newUid, "normal");
+                hideAuthModal();
+
+                if (oldUidForPushing) {
+                    localData = localData || { score: 0, playTimeSeconds: 0 };
+                    cloudData = cloudData || { score: 0, playTimeSeconds: 0 };
+                    localData.uid = oldUidForPushing;
+                    showConflictModal(localData, cloudData, newUid, oldUidForPushing);
+                } else {
+                    await window.gameAlert("ログインしました！", "LOGIN SUCCESS");
+                }
+                btnSubmitAuth.disabled = false;
+                return;
+            } catch (signInErr) {
+                if (signInErr.code === 'auth/user-not-found' ||
+                    signInErr.code === 'auth/invalid-login-credentials') {
+                    // アカウントが存在しない → 新規作成フローへ
+                } else if (signInErr.code === 'auth/wrong-password') {
+                    throw signInErr;
+                } else if (signInErr.code === 'auth/too-many-requests') {
+                    throw signInErr;
+                } else if (signInSucceeded) {
+                    throw signInErr;
+                } else {
+                    // 不明なエラーでも新規作成を試みる
+                }
+            }
+
+            // Step 2: 新規アカウント作成
+            // 匿名ユーザーならまず linkWithCredential を試す（UIDが変わらない最善の方法）
+            if (auth.currentUser && auth.currentUser.isAnonymous) {
                 try {
+                    authErrorMsg.innerText = "アカウントを作成中...";
                     const credential = EmailAuthProvider.credential(email, pwd);
                     const result = await linkWithCredential(auth.currentUser, credential);
-                    // リンク成功: 匿名アカウントがそのままメールアカウントに昇格
+                    // リンク成功: UIDが変わらないので、Auth削除もデータ移行も不要
                     hideAuthModal();
                     await window.gameAlert("アカウントを連携しました！\nデータが安全にバックアップされています。", "LINKED");
                     updateAccountUI(auth.currentUser);
                     btnSubmitAuth.disabled = false;
                     return;
                 } catch (linkErr) {
-                    if (linkErr.code === 'auth/operation-not-allowed') {
-                        // Firebaseの「verify the new email before changing email」制約等でリンク処理がブロックされた場合、
-                        // 新規作成(Signup)として扱い、安全にデータ移行を行う
-                        try {
-                            const createResult = await createUserWithEmailAndPassword(auth, email, pwd);
-                            const newUid = createResult.user.uid;
-                            if (localData && localData.score > 0) {
-                                localData.uid = oldUidForPushing;
-                                await window.updatePersonalDataAfterConflict(localData, newUid);
-                            }
-                            await cleanupOldAnonymousAccount(oldUidForPushing);
-                            hideAuthModal();
-                            await window.gameAlert("アカウントを作成し、データを引き継ぎました！\nデータが安全にバックアップされています。", "SIGNUP SUCCESS");
-                            updateAccountUI(auth.currentUser);
-                            btnSubmitAuth.disabled = false;
-                            return;
-                        } catch (createErr) {
-                            if (createErr.code === 'auth/email-already-in-use') {
-                                // アカウントが既に存在する場合は以降のSignInフローへ進ませる
-                            } else {
-                                throw createErr;
-                            }
-                        }
-                    } else if (linkErr.code !== 'auth/email-already-in-use' &&
+                    if (linkErr.code !== 'auth/operation-not-allowed' &&
+                        linkErr.code !== 'auth/email-already-in-use' &&
                         linkErr.code !== 'auth/credential-already-in-use') {
-                        throw linkErr; // 予期しないエラーは上位へ
+                        throw linkErr;
                     }
-                    // メール既存 → ログインフローへ
+                    // linkが使えない → createUserWithEmailAndPassword で新規作成
                 }
             }
 
-            // Step 2: ログインフロー（既存アカウント）
-            const result = await signInWithEmailAndPassword(auth, email, pwd);
-            const newUid = result.user.uid;
-            let cloudData = await window.getPersonalHighScoreAndData(newUid, "normal");
-            
-            hideAuthModal();
-
-            // データ選択（匿名アカウントが存在していた場合は常に選択モーダルを出す）
-            if (oldUidForPushing) {
-                localData = localData || { score: 0, playTimeSeconds: 0 };
-                cloudData = cloudData || { score: 0, playTimeSeconds: 0 };
-                localData.uid = oldUidForPushing;
-                showConflictModal(localData, cloudData, newUid, oldUidForPushing);
-            } else {
-                await window.gameAlert("ログインしました！", "LOGIN SUCCESS");
+            // Step 3: 通常の新規作成（linkが使えない場合のフォールバック）
+            authErrorMsg.innerText = "アカウントを作成中...";
+            try {
+                const createResult = await createUserWithEmailAndPassword(auth, email, pwd);
+                if (oldUidForPushing) {
+                    authErrorMsg.innerText = "アカウント作成完了。古いデータを整理中...";
+                    const deleteSuccess = await deleteAnonymousAccount(oldUidForPushing);
+                    if (!deleteSuccess) {
+                        console.warn("古いデータの整理に失敗。リトライ済み。");
+                    }
+                    if (localData && localData.score > 0) {
+                        await migrateData(oldUidForPushing, "local");
+                    }
+                }
+                hideAuthModal();
+                await window.gameAlert("アカウントを作成しました！\nデータが安全にバックアップされています。", "SIGNUP SUCCESS");
+                updateAccountUI(auth.currentUser);
+                btnSubmitAuth.disabled = false;
+                return;
+            } catch (createErr) {
+                if (createErr.code === 'auth/email-already-in-use') {
+                    // signIn で auth/invalid-login-credentials が返され、
+                    // createUser でも email-already-in-use → パスワードが間違っている
+                    throw { code: 'auth/wrong-password', message: 'パスワードが間違っています。' };
+                }
+                throw createErr;
             }
         } catch (e) {
             console.error(e);
@@ -7191,7 +7283,7 @@ function initFirebaseAuthUI() {
             let msg = "エラーが発生しました。";
             if (e.code === 'auth/email-already-in-use') msg = "このメールアドレスは既に別のアカウントに連携されています。「ログイン」をお試しください。";
             if (e.code === 'auth/wrong-password' || e.code === 'auth/invalid-login-credentials') msg = "パスワードが間違っています。";
-            if (e.code === 'auth/user-not-found') msg = "このメールアドレスは登録されていません。";
+            if (e.code === 'auth/user-not-found') msg = "このメールアドレスは登録されていません。新規登録する場合はそのまま入力してください。";
             if (e.code === 'auth/invalid-email') msg = "メールアドレスの形式が正しくありません。";
             if (e.code === 'auth/too-many-requests') msg = "試行回数が多すぎます。しばらくお待ちください。";
             if (e.code === 'auth/requires-recent-login') msg = "セッションが古くなっています。ページを更新してから再度お試しください。";
@@ -7209,7 +7301,7 @@ function initFirebaseAuthUI() {
                 c.style.opacity = '0.5';
             });
             card.style.opacity = '1';
-            card.style.boxShadow = `0 0 15px ${card.dataset.choice === 'local' ? 'rgba(0,240,255,0.4)' : 'rgba(255,51,85,0.4)'}`;
+            card.style.boxShadow = "0 0 15px " + (card.dataset.choice === 'local' ? 'rgba(0,240,255,0.4)' : 'rgba(255,51,85,0.4)');
             selectedConflictChoice = card.dataset.choice;
             btnConfirmConflict.disabled = false;
         });
@@ -7233,24 +7325,36 @@ function initFirebaseAuthUI() {
         btnConfirmConflict.onclick = async () => {
             btnConfirmConflict.disabled = true;
             btnConfirmConflict.innerText = "処理中...";
+            
+            // サーバー側でデータ移行のみ実行（Auth削除は既に完了済み）
+            if (oldUidForPushing) {
+                const migrated = await migrateData(oldUidForPushing, selectedConflictChoice);
+                if (!migrated) {
+                    await window.gameAlert("データ移行に失敗しました。もう一度お試しください。", "ERROR");
+                    btnConfirmConflict.disabled = false;
+                    btnConfirmConflict.innerText = "選択したデータで引き継ぐ";
+                    return;
+                }
+            }
+            
             if (selectedConflictChoice === 'local') {
-                await window.updatePersonalDataAfterConflict(local, newUid);
                 await window.gameAlert("現在のプレイデータで上書きしました！", "DATA SYNCED");
             } else {
                 await window.gameAlert("クラウドのデータを引き継ぎました！", "DATA SYNCED");
             }
-            // 古い匿名アカウントをクリーンアップ
-            if (oldUidForPushing) await cleanupOldAnonymousAccount(oldUidForPushing);
+            
             dataConflictModal.style.display = "none";
             btnConfirmConflict.innerText = "選択したデータで引き継ぐ";
             await window.gameAlert("画面を再読み込みして変更を反映します...", "RELOADING");
             window.location.reload();
         };
 
-        // キャンセル時も古い匿名アカウントをクリーンアップ
+        // キャンセル時: Auth削除は既に完了済み。古いデータだけ消す
         btnCancelConflict.onclick = async () => {
             dataConflictModal.style.display = "none";
-            if (oldUidForPushing) await cleanupOldAnonymousAccount(oldUidForPushing);
+            if (oldUidForPushing) {
+                await migrateData(oldUidForPushing, "cloud");
+            }
             await window.gameAlert("キャンセルしました。クラウドのデータを引き継ぎます。", "DATA SYNCED");
             await window.gameAlert("画面を再読み込みして変更を反映します...", "RELOADING");
             window.location.reload();

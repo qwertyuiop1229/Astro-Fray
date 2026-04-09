@@ -7,10 +7,16 @@
 	],
 	"env": {
 		"dev": {
-			"name": "astro-fray-dev"
+			"name": "astro-fray-dev",
+			"vars": {
+				"WORKER_ENV": "dev"
+			}
 		},
 		"prod": {
-			"name": "astro-fray-prod"
+			"name": "astro-fray-prod",
+			"vars": {
+				"WORKER_ENV": "prod"
+			}
 		}
 	}
 }
