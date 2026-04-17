@@ -69,3 +69,6 @@ node_modules/
 
 # Documentation and temporary notes
 docs/
+
+# Vite build output
+dist/

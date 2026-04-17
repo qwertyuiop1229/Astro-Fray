@@ -7,7 +7,10 @@
     "doc": "docs"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "vite",
+    "build:ecs": "vite build",
+    "preview": "vite preview"
   },
   "repository": {
     "type": "git",
@@ -22,7 +25,8 @@
   },
   "homepage": "https://github.com/qwertyuiop1229/shooting-games#readme",
   "devDependencies": {
-    "javascript-obfuscator": "^5.4.1"
+    "javascript-obfuscator": "^5.4.1",
+    "vite": "^8.0.8"
   },
   "dependencies": {
     "acorn": "^8.15.0",
