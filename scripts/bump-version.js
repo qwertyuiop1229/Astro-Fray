@@ -2,7 +2,7 @@ const fs = require('fs');
 const p = require('path');
 const { execSync } = require('child_process');
 
-const filePath = p.join(__dirname, '..', 'public', 'js', 'game.js');
+const filePath = p.join(__dirname, '..', 'public', 'js', 'core', 'state.js');
 let js = fs.readFileSync(filePath, 'utf-8');
 
 let isProd = false;
@@ -13,7 +13,7 @@ try {
     // defaults to false
 }
 
-const match = js.match(/const GAME_VERSION = (['"])(\d+)\.(\d+)\.(\d+)\1/);
+const match = js.match(/window\.GAME_VERSION = (['"])(\d+)\.(\d+)\.(\d+)\1/);
 if (match) {
     const q = match[1];
     const major = parseInt(match[2]);
@@ -28,7 +28,7 @@ if (match) {
     }
     
     const newVersion = `${major}.${minor}.${patch}`;
-    js = js.replace(new RegExp(`const GAME_VERSION = ${q}\\d+\\.\\d+\\.\\d+${q}`), `const GAME_VERSION = ${q}${newVersion}${q}`);
+    js = js.replace(new RegExp(`window\\.GAME_VERSION = ${q}\\d+\\.\\d+\\.\\d+${q}`), `window.GAME_VERSION = ${q}${newVersion}${q}`);
     fs.writeFileSync(filePath, js, 'utf-8');
     console.log(`${isProd ? '🚀 [PROD]' : '🧪 [TEST]'} Version bumped to ${newVersion}`);
 } else {

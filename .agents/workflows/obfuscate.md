@@ -16,10 +16,10 @@ npm install -g javascript-obfuscator
 以下のコマンドを実行して、`public/game.js` を難読化します。
 
 // turbo-all
-1. `javascript-obfuscator` コマンドでファイルを変換します
+1. `scripts/build_prod.js` を実行して結合と暗号化を全自動で行います。
 ```bash
-npx javascript-obfuscator public/game.js --output public/game.obfuscated.js --compact true --control-flow-flattening true --dead-code-injection true --string-array true --string-array-encoding 'base64'
+node scripts/build_prod.js
 ```
-
-2. 変換が完了したら、`index.html` 内の `<script src="game.js"></script>` なとで読み込んでいる部分を一時的に `game.obfuscated.js` に変更してデプロイします。
-※ 本番デプロイが完了した後は、ローカルでの開発継続のために元の `game.js` の読み込みに戻すことを推奨します。
+2. 実行後、`public/js/game.obfuscated.js` が自動生成されます。
+3. `index.html` 内で `<script src="js/core/keybindings.js">` など分割された22個のスクリプトタグを全削除し、一時的に `<script src="js/game.obfuscated.js"></script>` を1つだけ記述してデプロイします。
+※ 本番デプロイが完了した後は、開発継続のために元の `index.html` (22個のファイルを読み込む状態) に戻すことを推奨します（Gitの変更を破棄するか、元に戻してください）。
